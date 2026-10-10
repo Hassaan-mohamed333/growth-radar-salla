@@ -28,6 +28,14 @@ The database name **must contain "test"**: every suite truncates all tables.
 | `recommendations` | Engine lifecycle, suppression, concurrent decisions |
 | `tenant-isolation` | Every read/write is scoped to the session's store |
 | `http` | Auth, zod validation, SSRF rejection, and the full merchant flow over HTTP |
+| `oauth` | Salla login over HTTP: PKCE S256, single-use state bound to the browser cookie, encrypted token storage, re-authorization, callback race |
+| `token-refresh` | Refresh once for concurrent callers and across instances (Redis lock), rotation, rejected vs transient failures |
+| `webhooks` | HMAC verification, duplicate/concurrent delivery idempotency, key release on failure, event routing |
+| `schedulers` | One instance syncs per interval (Redis lock), failures are isolated per store, inactive stores skipped |
 
-Not covered (needs Redis / the live Salla API): OAuth state, webhook idempotency keys,
-schedulers' distributed locks, Salla response shapes.
+Redis is **emulated** (`ioredis-mock`): the code only uses `SET EX/NX`, `GETDEL` and `DEL`, but this is
+not a real server. Salla is **faked at the HTTP boundary** (`accounts.salla.sa`), so response shapes are
+our assumptions, not captured traffic.
+
+Not covered: the live Salla API (real response shapes, real consent screen), real competitor sites,
+and a real Redis server.
