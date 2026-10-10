@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { SALLA_LOGIN_URL, type ConnectionState, type StoreStatus } from '../lib/api';
 import { UserMenu } from './user-menu';
 
-export type NavKey = 'overview' | 'products' | 'competitors' | 'recommendations';
+export type NavKey = 'overview' | 'products' | 'competitors' | 'recommendations' | 'confidence';
 
 /** Entries without `href` are planned sections and render as inert text, not dead links. */
 const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
@@ -14,7 +14,7 @@ const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
   { key: 'products', label: 'المنتجات', href: '/products' },
   { key: 'competitors', label: 'المنافسون', href: '/competitors' },
   { key: 'recommendations', label: 'التوصيات', href: '/recommendations' },
-  { label: 'ثقة البيانات' },
+  { key: 'confidence', label: 'ثقة البيانات', href: '/data-confidence' },
   { label: 'الإعدادات' },
 ];
 

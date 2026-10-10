@@ -1,5 +1,5 @@
 // Typed client for the NestJS backend. Types mirror
-// apps/backend/src/{store,analytics,products,competitors,recommendations}/*.service.ts — keep them in sync.
+// apps/backend/src/{store,analytics,products,competitors,recommendations,data-confidence}/*.service.ts — keep them in sync.
 
 import { cookies } from 'next/headers';
 
@@ -159,6 +159,40 @@ export interface CompetitorQuery {
   search?: string;
 }
 
+export type AuditStatus = 'PASSED' | 'WARNING' | 'FAILED';
+
+export interface AuditItem {
+  id: string;
+  entityType: string;
+  entity: { id: string; name: string; domain: string | null } | null;
+  source: string;
+  score: number;
+  status: AuditStatus;
+  checks: Array<{ name: string; score: number; detail: string | null }>;
+  recommendation: { id: string; title: string; status: string } | null;
+  createdAt: string;
+}
+
+export interface DataConfidence {
+  summary: {
+    windowDays: number;
+    auditsCount: number;
+    averageScore: number | null;
+    byStatus: Record<AuditStatus, number>;
+    checks: Array<{ name: string; averageScore: number; count: number }>;
+  };
+  items: AuditItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface DataConfidenceQuery {
+  status?: 'ALL' | AuditStatus;
+  page?: number;
+  pageSize?: number;
+}
+
 export type RecommendationKind =
   | 'match_competitor'
   | 'margin_floor'
@@ -260,6 +294,14 @@ export async function settle<T>(p: Promise<T>, flags: { unauthorized: boolean })
 export const api = {
   storeStatus: () => get<StoreStatus>('/api/v1/store/status'),
   analyticsSummary: () => get<AnalyticsSummary>('/api/v1/analytics/summary'),
+  dataConfidence: (q: DataConfidenceQuery = {}) => {
+    const params = new URLSearchParams();
+    if (q.status) params.set('status', q.status);
+    if (q.page) params.set('page', String(q.page));
+    if (q.pageSize) params.set('pageSize', String(q.pageSize));
+    const qs = params.toString();
+    return get<DataConfidence>(`/api/v1/data-confidence${qs ? `?${qs}` : ''}`);
+  },
   competitors: (q: CompetitorQuery = {}) => {
     const params = new URLSearchParams();
     if (q.page) params.set('page', String(q.page));

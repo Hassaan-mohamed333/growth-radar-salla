@@ -4,6 +4,7 @@ import { validateEnv } from './config/env';
 import { AuthModule } from './auth/auth.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { CompetitorsModule } from './competitors/competitors.module';
+import { DataConfidenceModule } from './data-confidence/data-confidence.module';
 import { StoreModule } from './store/store.module';
 import { SecurityModule } from './security/security.module';
 import { PrismaModule } from './prisma/prisma.module';
