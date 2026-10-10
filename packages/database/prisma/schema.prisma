@@ -1,0 +1,359 @@
+// Growth Radar for Salla (راصد) — PostgreSQL schema.
+//
+// Multi-tenancy: every tenant-scoped table carries `tenantId` so queries can be
+// filtered (and Postgres RLS policies added later) without joining through stores.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+
+  @@map("tenant_status")
+}
+
+enum StoreStatus {
+  ACTIVE
+  UNINSTALLED
+  SUSPENDED
+
+  @@map("store_status")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEWER
+
+  @@map("user_role")
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+
+  @@map("connection_status")
+}
+
+enum ProductStatus {
+  SALE
+  OUT
+  HIDDEN
+  DELETED
+
+  @@map("product_status")
+}
+
+enum AuditStatus {
+  PASSED
+  WARNING
+  FAILED
+
+  @@map("audit_status")
+}
+
+enum RecommendationType {
+  PRICE_ADJUSTMENT
+  RESTOCK
+  PROMOTION
+  COMPETITOR_ALERT
+  LISTING_IMPROVEMENT
+
+  @@map("recommendation_type")
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+  EXPIRED
+  APPLIED
+
+  @@map("recommendation_status")
+}
+
+// ───────────────────────── Models ─────────────────────────
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String       @unique
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  stores              Store[]
+  users               User[]
+  connections         SallaConnection[]
+  products            Product[]
+  competitors         Competitor[]
+  confidenceAudits    DataConfidenceAudit[]
+  recommendations     DecisionRecommendation[]
+  competitorPrices    CompetitorPriceHistory[]
+  salesSnapshots      SalesSnapshot[]
+
+  @@map("tenants")
+}
+
+model Store {
+  id             String      @id @default(uuid()) @db.Uuid
+  tenantId       String      @map("tenant_id") @db.Uuid
+  /// Salla merchant id (from webhook `merchant` field / OAuth user info).
+  sallaMerchantId String     @unique @map("salla_merchant_id")
+  name           String
+  domain         String?
+  currency       String      @default("SAR") @db.VarChar(3)
+  locale         String      @default("ar") @db.VarChar(10)
+  status         StoreStatus @default(ACTIVE)
+  installedAt    DateTime    @default(now()) @map("installed_at") @db.Timestamptz(6)
+  uninstalledAt  DateTime?   @map("uninstalled_at") @db.Timestamptz(6)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection      SallaConnection?
+  products        Product[]
+  competitors     Competitor[]
+  confidenceAudits DataConfidenceAudit[]
+  recommendations DecisionRecommendation[]
+  competitorPrices CompetitorPriceHistory[]
+  salesSnapshots  SalesSnapshot[]
+
+  @@index([tenantId])
+  @@map("stores")
+}
+
+model User {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  email       String
+  name        String?
+  role        UserRole  @default(VIEWER)
+  /// Salla user id when the account was created through Salla OAuth.
+  sallaUserId String?   @map("salla_user_id")
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  decidedRecommendations DecisionRecommendation[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+/// OAuth credentials for a store. Tokens are NEVER stored in plaintext:
+/// `accessTokenEnc` / `refreshTokenEnc` hold AES-256-GCM envelopes produced by
+/// the backend TokenEncryptionService (`v<keyVersion>.<iv>.<tag>.<ciphertext>`).
+model SallaConnection {
+  id                   String           @id @default(uuid()) @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  storeId              String           @unique @map("store_id") @db.Uuid
+  accessTokenEnc       String           @map("access_token_enc")
+  refreshTokenEnc      String?          @map("refresh_token_enc")
+  /// Version of the encryption key used, to support key rotation.
+  keyVersion           Int              @default(1) @map("key_version")
+  scopes               String[]
+  accessTokenExpiresAt DateTime?        @map("access_token_expires_at") @db.Timestamptz(6)
+  lastRefreshedAt      DateTime?        @map("last_refreshed_at") @db.Timestamptz(6)
+  status               ConnectionStatus @default(ACTIVE)
+  lastError            String?          @map("last_error")
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status, accessTokenExpiresAt])
+  @@map("encrypted_salla_connections")
+}
+
+model Product {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  storeId        String        @map("store_id") @db.Uuid
+  sallaProductId String        @map("salla_product_id")
+  sku            String?
+  name           String
+  price          Decimal       @db.Decimal(12, 2)
+  salePrice      Decimal?      @map("sale_price") @db.Decimal(12, 2)
+  costPrice      Decimal?      @map("cost_price") @db.Decimal(12, 2)
+  currency       String        @default("SAR") @db.VarChar(3)
+  quantity       Int?
+  status         ProductStatus @default(SALE)
+  url            String?
+  imageUrl       String?       @map("image_url")
+  rawPayload     Json?         @map("raw_payload")
+  syncedAt       DateTime?     @map("synced_at") @db.Timestamptz(6)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store           Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  competitors     Competitor[]
+  recommendations DecisionRecommendation[]
+
+  @@unique([storeId, sallaProductId])
+  @@index([tenantId])
+  @@index([storeId, status])
+  @@map("products")
+}
+
+model Competitor {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  storeId       String    @map("store_id") @db.Uuid
+  /// Our product this competitor listing is compared against (optional: store-level competitor).
+  productId     String?   @map("product_id") @db.Uuid
+  name          String
+  domain        String
+  productUrl    String?   @map("product_url")
+  lastPrice     Decimal?  @map("last_price") @db.Decimal(12, 2)
+  currency      String    @default("SAR") @db.VarChar(3)
+  isActive      Boolean   @default(true) @map("is_active")
+  lastCheckedAt DateTime? @map("last_checked_at") @db.Timestamptz(6)
+  /// Consecutive failed scrapes; reset on success. Drives retry backoff.
+  scrapeFailures Int      @default(0) @map("scrape_failures")
+  /// Fixed-vocabulary reason of the last failed scrape (never a raw error/response).
+  lastScrapeError String? @map("last_scrape_error")
+  /// Earliest time the scraper may fetch this listing again (null = due now).
+  nextScrapeAt  DateTime? @map("next_scrape_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  priceHistory CompetitorPriceHistory[]
+
+  @@unique([storeId, domain, productUrl])
+  @@index([tenantId])
+  @@index([storeId, isActive])
+  @@index([isActive, nextScrapeAt])
+  @@index([productId])
+  @@map("competitors")
+}
+
+/// Append-only: one row per observed competitor price. `Competitor.lastPrice`
+/// stays as the denormalised latest value; write both in the same transaction.
+/// Only insert a row when the price (or availability) changed, or on a periodic
+/// heartbeat, to keep the table small.
+model CompetitorPriceHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  storeId      String   @map("store_id") @db.Uuid
+  competitorId String   @map("competitor_id") @db.Uuid
+  price        Decimal  @db.Decimal(12, 2)
+  /// Price before this observation (null for the first one), so change % needs no self-join.
+  previousPrice Decimal? @map("previous_price") @db.Decimal(12, 2)
+  currency     String   @default("SAR") @db.VarChar(3)
+  inStock      Boolean? @map("in_stock")
+  /// Where the price came from, e.g. "scraper", "manual".
+  source       String
+  observedAt   DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, observedAt(sort: Desc)])
+  @@index([storeId, observedAt(sort: Desc)])
+  @@index([tenantId])
+  @@map("competitor_price_history")
+}
+
+/// One row per store per day (in the store's local day, stored as a DATE).
+/// Sales velocity = unitsSold / days over a window. Upserted from Salla order
+/// data / order webhooks; re-running a day overwrites it, so it is idempotent.
+model SalesSnapshot {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  storeId      String   @map("store_id") @db.Uuid
+  date         DateTime @db.Date
+  ordersCount  Int      @default(0) @map("orders_count")
+  unitsSold    Int      @default(0) @map("units_sold")
+  grossRevenue Decimal  @default(0) @map("gross_revenue") @db.Decimal(14, 2)
+  refundedRevenue Decimal @default(0) @map("refunded_revenue") @db.Decimal(14, 2)
+  currency     String   @default("SAR") @db.VarChar(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, date])
+  @@index([tenantId])
+  @@map("sales_snapshots")
+}
+
+/// Records how trustworthy a data point (a synced product, a scraped competitor
+/// price, ...) was at the moment it fed a recommendation.
+model DataConfidenceAudit {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
+  storeId         String      @map("store_id") @db.Uuid
+  /// Polymorphic reference: "product" | "competitor" | ...
+  entityType      String      @map("entity_type")
+  entityId        String      @map("entity_id") @db.Uuid
+  source          String
+  /// 0.000 – 1.000
+  confidenceScore Decimal     @map("confidence_score") @db.Decimal(4, 3)
+  status          AuditStatus
+  checks          Json
+  notes           String?
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store           Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  recommendations DecisionRecommendation[]
+
+  @@index([tenantId])
+  @@index([storeId, entityType, entityId])
+  @@index([storeId, createdAt])
+  @@map("data_confidence_audits")
+}
+
+model DecisionRecommendation {
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @map("tenant_id") @db.Uuid
+  storeId           String               @map("store_id") @db.Uuid
+  productId         String?              @map("product_id") @db.Uuid
+  confidenceAuditId String?              @map("confidence_audit_id") @db.Uuid
+  type              RecommendationType
+  status            RecommendationStatus @default(PENDING)
+  title             String
+  rationale         String
+  /// Structured action details (e.g. suggested price, expected uplift).
+  payload           Json
+  expiresAt         DateTime?            @map("expires_at") @db.Timestamptz(6)
+  decidedByUserId   String?              @map("decided_by_user_id") @db.Uuid
+  decidedAt         DateTime?            @map("decided_at") @db.Timestamptz(6)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store           Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product         Product?             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  confidenceAudit DataConfidenceAudit? @relation(fields: [confidenceAuditId], references: [id], onDelete: SetNull)
+  decidedBy       User?                @relation(fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([storeId, status, createdAt])
+  @@index([productId])
+  @@map("decision_recommendations")
+}

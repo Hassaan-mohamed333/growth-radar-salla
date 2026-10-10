@@ -1,0 +1,90 @@
+import { ScrapeError } from './scrape-error';
+import { domainOf, isPublicAddress, parseCompetitorUrl } from './url-guard';
+
+const kindOf = (fn: () => unknown) => {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof ScrapeError ? err.kind : 'other';
+  }
+  return 'none';
+};
+
+describe('parseCompetitorUrl', () => {
+  it('accepts public http(s) URLs', () => {
+    expect(parseCompetitorUrl('https://shop.example.com/p/1?x=1').hostname).toBe('shop.example.com');
+    expect(parseCompetitorUrl('http://example.sa/product').protocol).toBe('http:');
+  });
+
+  it.each([
+    'ftp://example.com/x',
+    'file:///etc/passwd',
+    'javascript:alert(1)',
+    'not a url',
+    'https://user:pw@example.com/',
+    'https://intranet/',
+  ])('rejects %s as invalid', (u) => {
+    expect(kindOf(() => parseCompetitorUrl(u))).toBe('invalid_url');
+  });
+
+  it.each([
+    'http://localhost/x',
+    'http://app.localhost/x',
+    'http://127.0.0.1/x',
+    'http://10.0.0.5/x',
+    'http://192.168.1.1/x',
+    'http://172.16.0.1/x',
+    'http://169.254.169.254/latest/meta-data',
+    'http://[::1]/x',
+    'http://[fd00::1]/x',
+    'http://[::ffff:127.0.0.1]/x',
+    'http://printer.local/x',
+  ])('rejects %s as a forbidden target', (u) => {
+    expect(kindOf(() => parseCompetitorUrl(u))).toBe('forbidden_target');
+  });
+
+  it('rejects over-long URLs', () => {
+    expect(kindOf(() => parseCompetitorUrl(`https://example.com/${'a'.repeat(3000)}`))).toBe(
+      'invalid_url',
+    );
+  });
+});
+
+describe('isPublicAddress', () => {
+  it.each(['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111'])('%s is public', (a) => {
+    expect(isPublicAddress(a)).toBe(true);
+  });
+
+  it.each([
+    '0.0.0.0',
+    '10.1.2.3',
+    '100.64.0.1',
+    '127.0.0.1',
+    '169.254.1.1',
+    '172.31.255.255',
+    '192.168.0.1',
+    '198.18.0.1',
+    '224.0.0.1',
+    '255.255.255.255',
+    '::',
+    '::1',
+    'fe80::1',
+    'fc00::1',
+    'ff02::1',
+    '::ffff:10.0.0.1',
+    '::ffff:7f00:1',
+    'garbage',
+  ])('%s is not public', (a) => {
+    expect(isPublicAddress(a)).toBe(false);
+  });
+
+  it('does not treat 172.32.x as private', () => {
+    expect(isPublicAddress('172.32.0.1')).toBe(true);
+  });
+});
+
+describe('domainOf', () => {
+  it('lowercases and strips www.', () => {
+    expect(domainOf(new URL('https://WWW.Example.com/a'))).toBe('example.com');
+  });
+});
