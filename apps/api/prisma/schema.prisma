@@ -1,0 +1,406 @@
+// Growth Radar for Salla (راصد) — multi-tenant schema.
+//
+// Tenancy rules (enforced in 3 layers):
+//  1. Every tenant-owned table has NOT NULL tenant_id; store-scoped tables also carry store_id with a
+//     COMPOSITE FK (tenant_id, store_id) -> stores(tenant_id, id), so a row can never point at another tenant's store.
+//  2. Application queries always filter by tenant_id explicitly (see TenantDb).
+//  3. Postgres Row-Level Security (migration 0002) denies cross-tenant access even if layers 1-2 have a bug.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantType {
+  MERCHANT
+  AGENCY
+}
+
+enum Role {
+  OWNER
+  AGENCY_ADMIN
+  MARKETER
+  CLIENT_VIEWER
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  REFRESH_FAILED
+  REVOKED
+}
+
+enum WebhookStatus {
+  RECEIVED
+  QUEUED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum IngestionSource {
+  SALLA_API
+  GA4
+  GSC
+  APIFY
+}
+
+enum ConfidenceLevel {
+  high
+  medium
+  low
+  insufficient_data
+}
+
+enum RecommendationCategory {
+  TRACKING
+  PRICING
+  COMPETITOR
+  INVENTORY
+  CAMPAIGN
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RecommendationStatus {
+  OPEN
+  ACCEPTED
+  DISMISSED
+  EXPIRED
+}
+
+model Tenant {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String     @db.VarChar(200)
+  type      TenantType @default(MERCHANT)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  stores      Store[]
+  memberships Membership[]
+
+  @@map("tenants")
+}
+
+/// Global identity (a person can belong to many tenants, e.g. an agency employee). Not tenant-scoped.
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String?  @unique @db.VarChar(320)
+  name         String?  @db.VarChar(200)
+  /// Salla's user id from the OAuth userinfo endpoint; identity link for "Login with Salla".
+  sallaUserId  BigInt?  @unique @map("salla_user_id")
+  locale       String   @default("ar") @db.VarChar(5)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  memberships Membership[]
+
+  @@map("users")
+}
+
+model Membership {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      Role
+  /// NULL = access to every store in the tenant. Set = restricted to one store (e.g. CLIENT_VIEWER of one client).
+  storeId   String?  @map("store_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store  Store? @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId, role])
+  // (tenant,user,store) uniqueness incl. NULL store is added in SQL migration via COALESCE index.
+  @@map("memberships")
+}
+
+model Store {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(200)
+  domain    String?  @db.VarChar(255)
+  currency  String   @default("SAR") @db.Char(3)
+  timezone  String   @default("Asia/Riyadh") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships       Membership[]
+  connection        SallaConnection?
+  categories        Category[]
+  products          Product[]
+  orders            Order[]
+  audits            DataConfidenceAudit[]
+  snapshots         AnalyticsSnapshot[]
+  competitors       Competitor[]
+  observations      CompetitorObservation[]
+  recommendations   DecisionRecommendation[]
+  webhookEvents     WebhookEvent[]
+  ingestions        RawIngestion[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId])
+  @@map("stores")
+}
+
+model SallaConnection {
+  id                String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  storeId           String           @unique @map("store_id") @db.Uuid
+  /// Salla merchant (store) id; the `merchant` field of every webhook.
+  sallaMerchantId   BigInt           @unique @map("salla_merchant_id")
+  /// AES-256-GCM envelopes ("v1.<keyId>.<iv>.<tag>.<ct>"), AAD-bound to tenant/store. NEVER plaintext.
+  accessTokenEnc    String           @map("access_token_enc")
+  refreshTokenEnc   String?          @map("refresh_token_enc")
+  accessExpiresAt   DateTime         @map("access_expires_at") @db.Timestamptz(6)
+  scopes            String[]
+  /// Non-secret store info returned by Salla (name, domain, plan...). Treated as untrusted display data.
+  storeMetadata     Json             @default("{}") @map("store_metadata")
+  status            ConnectionStatus @default(ACTIVE)
+  connectedAt       DateTime         @default(now()) @map("connected_at") @db.Timestamptz(6)
+  lastRefreshedAt   DateTime?        @map("last_refreshed_at") @db.Timestamptz(6)
+  lastSyncAt        DateTime?        @map("last_sync_at") @db.Timestamptz(6)
+  revokedAt         DateTime?        @map("revoked_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([tenantId, storeId])
+  @@index([status, accessExpiresAt])
+  @@map("salla_connections")
+}
+
+model Category {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  storeId      String   @map("store_id") @db.Uuid
+  sallaId      BigInt   @map("salla_id")
+  parentSallaId BigInt? @map("parent_salla_id")
+  name         String   @db.VarChar(300)
+  status       String?  @db.VarChar(40)
+  syncedAt     DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([storeId, sallaId])
+  @@index([tenantId, storeId])
+  @@map("categories")
+}
+
+model Product {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  storeId     String    @map("store_id") @db.Uuid
+  sallaId     BigInt    @map("salla_id")
+  sku         String?   @db.VarChar(120)
+  name        String    @db.VarChar(500)
+  status      String?   @db.VarChar(40)
+  price       Decimal?  @db.Decimal(14, 2)
+  salePrice   Decimal?  @map("sale_price") @db.Decimal(14, 2)
+  currency    String?   @db.Char(3)
+  quantity    Int?
+  categorySallaIds BigInt[] @map("category_salla_ids")
+  sallaUpdatedAt DateTime? @map("salla_updated_at") @db.Timestamptz(6)
+  syncedAt    DateTime  @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([storeId, sallaId])
+  @@index([tenantId, storeId, status])
+  @@index([tenantId, storeId, sku])
+  @@map("products")
+}
+
+model Order {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  sallaId       BigInt   @map("salla_id")
+  referenceId   String?  @map("reference_id") @db.VarChar(64)
+  statusSlug    String?  @map("status_slug") @db.VarChar(60)
+  /// Derived at ingest: does this order count as realised revenue? (paid/completed, not cancelled/refunded)
+  countsAsRevenue Boolean @default(false) @map("counts_as_revenue")
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(14, 2)
+  currency      String   @db.Char(3)
+  paymentMethod String?  @map("payment_method") @db.VarChar(60)
+  /// PII minimisation: only a salted hash of the customer id is stored, never name/phone/email.
+  customerHash  String?  @map("customer_hash") @db.Char(64)
+  placedAt      DateTime @map("placed_at") @db.Timestamptz(6)
+  sallaUpdatedAt DateTime? @map("salla_updated_at") @db.Timestamptz(6)
+  syncedAt      DateTime @default(now()) @map("synced_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([storeId, sallaId])
+  @@index([tenantId, storeId, placedAt(sort: Desc)])
+  @@index([tenantId, storeId, countsAsRevenue, placedAt])
+  @@map("orders")
+}
+
+/// IMMUTABLE evidence log of inbound Salla webhooks. Raw columns can never change (DB trigger);
+/// only processing-state columns are mutable.
+model WebhookEvent {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Resolved from salla_connections by merchant id AFTER signature verification.
+  tenantId       String        @map("tenant_id") @db.Uuid
+  storeId        String        @map("store_id") @db.Uuid
+  idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(128)
+  event          String        @db.VarChar(100)
+  sallaMerchantId BigInt       @map("salla_merchant_id")
+  /// Exact bytes received (UTF-8 text), signature was verified over these bytes.
+  rawBody        String        @map("raw_body")
+  bodySha256     String        @map("body_sha256") @db.Char(64)
+  /// Allow-listed headers only (no Authorization / signature secrets).
+  headers        Json
+  receivedAt     DateTime      @default(now()) @map("received_at") @db.Timestamptz(6)
+  // ---- mutable processing state ----
+  status         WebhookStatus @default(RECEIVED)
+  attempts       Int           @default(0)
+  processedAt    DateTime?     @map("processed_at") @db.Timestamptz(6)
+  lastError      String?       @map("last_error") @db.VarChar(1000)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, storeId, receivedAt(sort: Desc)])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
+
+/// IMMUTABLE evidence for API pulls (Salla/GA4/GSC/Apify). Append-only: UPDATE/DELETE blocked by trigger.
+model RawIngestion {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String          @map("tenant_id") @db.Uuid
+  storeId    String          @map("store_id") @db.Uuid
+  source     IngestionSource
+  /// e.g. "orders?page=3" / "ga4:runReport:2026-10-01"
+  requestRef String          @map("request_ref") @db.VarChar(300)
+  payload    Json
+  payloadSha256 String       @map("payload_sha256") @db.Char(64)
+  fetchedAt  DateTime        @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, storeId, source, fetchedAt(sort: Desc)])
+  @@map("raw_ingestions")
+}
+
+/// Normalised daily analytics totals derived from GA4 reports (the raw report is in raw_ingestions).
+model AnalyticsSnapshot {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  storeId      String          @map("store_id") @db.Uuid
+  source       IngestionSource @default(GA4)
+  day          DateTime        @db.Date
+  revenue      Decimal         @db.Decimal(14, 2)
+  purchases    Int
+  currency     String          @db.Char(3)
+  lastPurchaseEventAt DateTime? @map("last_purchase_event_at") @db.Timestamptz(6)
+  ingestionId  String?         @map("ingestion_id") @db.Uuid
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@unique([storeId, source, day])
+  @@index([tenantId, storeId, day(sort: Desc)])
+  @@map("analytics_snapshots")
+}
+
+/// Append-only audit trail of every Data Confidence evaluation.
+model DataConfidenceAudit {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  storeId         String          @map("store_id") @db.Uuid
+  windowStart     DateTime        @map("window_start") @db.Timestamptz(6)
+  windowEnd       DateTime        @map("window_end") @db.Timestamptz(6)
+  score           Int?            @db.SmallInt
+  level           ConfidenceLevel
+  checks          Json
+  sallaRevenue    Decimal         @map("salla_revenue") @db.Decimal(14, 2)
+  sallaOrderCount Int             @map("salla_order_count")
+  ga4Revenue      Decimal?        @map("ga4_revenue") @db.Decimal(14, 2)
+  ga4Purchases    Int?            @map("ga4_purchases")
+  currency        String          @db.Char(3)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, storeId, createdAt(sort: Desc)])
+  @@map("data_confidence_audits")
+}
+
+model Competitor {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  storeId   String   @map("store_id") @db.Uuid
+  name      String   @db.VarChar(200)
+  domain    String   @db.VarChar(255)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  store        Store                   @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+  observations CompetitorObservation[]
+
+  @@unique([storeId, domain])
+  @@unique([tenantId, id])
+  @@map("competitors")
+}
+
+model CompetitorObservation {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  competitorId  String   @map("competitor_id") @db.Uuid
+  /// Our product (Salla id) this competitor listing is matched to, if matched.
+  matchedProductSallaId BigInt? @map("matched_product_salla_id")
+  url           String   @db.VarChar(2000)
+  title         String?  @db.VarChar(500)
+  price         Decimal? @db.Decimal(14, 2)
+  currency      String?  @db.Char(3)
+  offerText     String?  @map("offer_text") @db.VarChar(500)
+  previousPrice Decimal? @map("previous_price") @db.Decimal(14, 2)
+  observedAt    DateTime @map("observed_at") @db.Timestamptz(6)
+  ingestionId   String?  @map("ingestion_id") @db.Uuid
+
+  store      Store      @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+  competitor Competitor @relation(fields: [tenantId, competitorId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, storeId, competitorId, observedAt(sort: Desc)])
+  @@index([tenantId, storeId, matchedProductSallaId, observedAt(sort: Desc)])
+  @@map("competitor_observations")
+}
+
+model DecisionRecommendation {
+  id          String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String                 @map("tenant_id") @db.Uuid
+  storeId     String                 @map("store_id") @db.Uuid
+  /// Stable machine code, e.g. "TRACKING_REVENUE_MISMATCH"; also dedupes re-generation (see unique idx in SQL).
+  code        String                 @db.VarChar(80)
+  category    RecommendationCategory
+  severity    Severity
+  titleAr     String                 @map("title_ar") @db.VarChar(200)
+  titleEn     String                 @map("title_en") @db.VarChar(200)
+  summaryAr   String                 @map("summary_ar") @db.VarChar(1000)
+  summaryEn   String                 @map("summary_en") @db.VarChar(1000)
+  /// 0.000 - 1.000, how sure the engine is that acting on this is correct (derived from data confidence).
+  confidence  Decimal                @db.Decimal(4, 3)
+  estimatedRevenueAtRisk Decimal     @default(0) @map("estimated_revenue_at_risk") @db.Decimal(14, 2)
+  currency    String                 @db.Char(3)
+  /// Evidence pointers (audit id, observation ids) so every claim is traceable.
+  evidence    Json                   @default("{}")
+  status      RecommendationStatus   @default(OPEN)
+  createdAt   DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime?              @map("expires_at") @db.Timestamptz(6)
+  actedBy     String?                @map("acted_by") @db.Uuid
+  actedAt     DateTime?              @map("acted_at") @db.Timestamptz(6)
+
+  store Store @relation(fields: [tenantId, storeId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, storeId, status, severity, createdAt(sort: Desc)])
+  @@map("decision_recommendations")
+}

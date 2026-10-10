@@ -1,0 +1,8 @@
+-- Runtime role: no superuser, no BYPASSRLS, not table owner => RLS policies apply to it.
+CREATE ROLE radar_app LOGIN PASSWORD 'radar_app_pw' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+GRANT CONNECT ON DATABASE radar TO radar_app;
+GRANT USAGE ON SCHEMA public TO radar_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE radar_owner IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO radar_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE radar_owner IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO radar_app;

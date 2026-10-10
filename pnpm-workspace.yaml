@@ -1,0 +1,15 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - esbuild
+  - sharp
+# Security overrides: force patched transitive versions (re-check with `pnpm audit --prod` when bumping Nest/Next).
+overrides:
+  fastify: '>=5.12.5'
+  postcss: '>=8.5.23'
+  deepmerge-ts: '>=8.0.0'

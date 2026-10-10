@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens as space-separated RGB triplets (Tailwind alpha support). */
+:root,
+:root[data-theme='light'] {
+  --bg: 246 247 249; --surface: 255 255 255; --surface-2: 241 243 246; --border: 223 227 233;
+  --fg: 17 24 39; --muted: 91 102 118;
+  --brand: 15 118 110; --brand-fg: 255 255 255;
+  --good: 21 128 61; --warn: 180 83 9; --bad: 185 28 28; --info: 29 78 216;
+}
+:root[data-theme='dark'] {
+  --bg: 11 15 20; --surface: 17 24 32; --surface-2: 24 33 44; --border: 38 49 63;
+  --fg: 236 241 247; --muted: 156 168 184;
+  --brand: 45 212 191; --brand-fg: 6 30 28;
+  --good: 74 222 128; --warn: 251 191 36; --bad: 248 113 113; --info: 96 165 250;
+}
+:root[data-theme='system'] {
+  --bg: 246 247 249; --surface: 255 255 255; --surface-2: 241 243 246; --border: 223 227 233;
+  --fg: 17 24 39; --muted: 91 102 118;
+  --brand: 15 118 110; --brand-fg: 255 255 255;
+  --good: 21 128 61; --warn: 180 83 9; --bad: 185 28 28; --info: 29 78 216;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --bg: 11 15 20; --surface: 17 24 32; --surface-2: 24 33 44; --border: 38 49 63;
+    --fg: 236 241 247; --muted: 156 168 184;
+    --brand: 45 212 191; --brand-fg: 6 30 28;
+    --good: 74 222 128; --warn: 251 191 36; --bad: 248 113 113; --info: 96 165 250;
+  }
+}
+
+html { color-scheme: light dark; --font-sans: 'IBM Plex Sans Arabic'; }
+body { @apply bg-bg text-fg antialiased; font-family: var(--font-sans), system-ui, sans-serif; }
+/* Arabic reads better with more leading; digits stay tabular for numeric columns. */
+html[lang='ar'] body { line-height: 1.75; }
+.tabular { font-variant-numeric: tabular-nums; }
+:focus-visible { @apply outline-2 outline-offset-2 outline-brand; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
