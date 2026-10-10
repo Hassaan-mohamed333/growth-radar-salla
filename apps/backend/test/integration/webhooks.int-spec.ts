@@ -14,6 +14,7 @@ import { SallaWebhookGuard } from '../../src/security/salla-webhook.guard';
 import { WebhookIdempotencyService } from '../../src/security/webhook-idempotency.service';
 import { OrderWebhookHandler } from '../../src/sync/order-webhook.handler';
 import { SalesSyncService } from '../../src/sync/sales-sync.service';
+import { AppLifecycleHandler } from '../../src/webhooks/app-lifecycle.handler';
 import { WebhookIdempotencyInterceptor } from '../../src/webhooks/webhook-idempotency.interceptor';
 import { WebhooksController } from '../../src/webhooks/webhooks.controller';
 import { resetDb, seedStore, type SeededStore } from './db';
@@ -40,6 +41,7 @@ describe('Salla webhooks over HTTP (signature + idempotency + handlers)', () => 
         WebhookIdempotencyService,
         OrderWebhookHandler,
         ProductWebhookHandler,
+        AppLifecycleHandler,
         ProductSyncService,
         { provide: REDIS, useValue: redis },
         { provide: SalesSyncService, useValue: salesSync },
@@ -201,6 +203,48 @@ describe('Salla webhooks over HTTP (signature + idempotency + handlers)', () => 
     expect(res.status).toBe(200);
     expect(salesSync.syncRange).toHaveBeenCalledTimes(1);
     expect(salesSync.syncRange.mock.calls[0]![0]).toBe(s.storeId);
+  });
+
+  it('switches the store off on app.uninstalled and leaves other stores alone', async () => {
+    const other = await seedStore(prisma);
+    for (const x of [s, other]) {
+      await prisma.sallaConnection.create({
+        data: { tenantId: x.tenantId, storeId: x.storeId, accessTokenEnc: 'v1.a.b.c', status: 'ACTIVE' },
+      });
+      await prisma.decisionRecommendation.create({
+        data: {
+          tenantId: x.tenantId,
+          storeId: x.storeId,
+          type: 'COMPETITOR_ALERT',
+          title: 't',
+          rationale: 'r',
+          payload: {},
+        },
+      });
+    }
+
+    const ev = signed('app.uninstalled', {});
+    expect((await post(ev.raw, ev.headers)).status).toBe(200);
+    // Salla retries / duplicates must be harmless.
+    expect((await post(ev.raw, ev.headers)).json).toEqual({ status: 'duplicate' });
+
+    const store = await prisma.store.findUniqueOrThrow({ where: { id: s.storeId } });
+    expect(store.status).toBe('UNINSTALLED');
+    expect(store.uninstalledAt).not.toBeNull();
+    const conn = await prisma.sallaConnection.findUniqueOrThrow({ where: { storeId: s.storeId } });
+    expect(conn).toMatchObject({ status: 'REVOKED', lastError: 'app_uninstalled' });
+    expect(
+      await prisma.decisionRecommendation.count({ where: { storeId: s.storeId, status: 'PENDING' } }),
+    ).toBe(0);
+
+    const kept = await prisma.store.findUniqueOrThrow({ where: { id: other.storeId } });
+    expect(kept.status).toBe('ACTIVE');
+    expect(
+      (await prisma.sallaConnection.findUniqueOrThrow({ where: { storeId: other.storeId } })).status,
+    ).toBe('ACTIVE');
+    expect(
+      await prisma.decisionRecommendation.count({ where: { storeId: other.storeId, status: 'PENDING' } }),
+    ).toBe(1);
   });
 
   it('answers 200 for unrelated events and for merchants we do not know', async () => {

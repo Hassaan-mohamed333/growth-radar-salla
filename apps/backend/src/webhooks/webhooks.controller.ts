@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Logger, Post } from '@nestjs/common';
 import { ProductWebhookHandler } from '../products/product-webhook.handler';
+import { AppLifecycleHandler } from './app-lifecycle.handler';
 import { OrderWebhookHandler } from '../sync/order-webhook.handler';
 import { SallaWebhook } from './salla-webhook.decorator';
 
@@ -17,6 +18,7 @@ export class WebhooksController {
   constructor(
     private readonly orders: OrderWebhookHandler,
     private readonly products: ProductWebhookHandler,
+    private readonly lifecycle: AppLifecycleHandler,
   ) {}
 
   @Post('salla')
@@ -32,7 +34,10 @@ export class WebhooksController {
     if (ProductWebhookHandler.handles(payload.event)) {
       await this.products.handle(payload.event, payload.merchant, payload.data);
     }
-    // TODO: app.store.authorize → SallaConnectionsService.saveTokens, app.uninstalled.
+    if (AppLifecycleHandler.handles(payload.event)) {
+      await this.lifecycle.handleUninstalled(payload.merchant);
+    }
+    // TODO: app.store.authorize (Easy mode) → SallaConnectionsService.saveTokens.
     // Keep handlers idempotent and fast; offload heavy work to a queue.
     return { status: 'ok' };
   }
