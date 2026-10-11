@@ -6,6 +6,8 @@ import { PiiService } from '../common/crypto/pii.service';
 import { TenantDb } from '../infra/tenant-db.service';
 import type { Tx } from '../infra/prisma.service';
 import { mapCategory, mapOrder, mapProduct } from './mappers';
+import { SyncService } from './sync.service';
+import { classifyEvent } from './webhook-events';
 import type { WebhookJob } from './webhook-ingest.service';
 
 /** Placeholder that satisfies the envelope CHECK but can never decrypt: used to destroy tokens on uninstall. */
@@ -14,7 +16,7 @@ const DEAD_ENVELOPE = 'v1.revoked.AAAA.AAAA.AAAA';
 @Processor(QUEUES.SALLA_WEBHOOK, { concurrency: 10 })
 export class WebhookProcessor extends WorkerHost {
   private readonly log = new Logger(WebhookProcessor.name);
-  constructor(private readonly db: TenantDb, private readonly pii: PiiService) {
+  constructor(private readonly db: TenantDb, private readonly pii: PiiService, private readonly sync: SyncService) {
     super();
   }
 
@@ -49,61 +51,80 @@ export class WebhookProcessor extends WorkerHost {
   }
 
   private async dispatch(tx: Tx, tenantId: string, storeId: string, event: string, data: unknown): Promise<boolean> {
-    if (event.startsWith('order.')) {
-      const o = mapOrder(data);
-      if (!o) throw new Error('order payload failed validation');
-      const existing = await tx.order.findFirst({ where: { tenantId, storeId, sallaId: o.sallaId }, select: { sallaUpdatedAt: true } });
-      // Webhooks can arrive out of order: never let an older snapshot overwrite a newer one.
-      if (existing?.sallaUpdatedAt && o.sallaUpdatedAt && o.sallaUpdatedAt < existing.sallaUpdatedAt) return true;
-      const row = {
-        referenceId: o.referenceId, statusSlug: o.statusSlug,
-        countsAsRevenue: event === 'order.deleted' ? false : o.countsAsRevenue,
-        totalAmount: o.totalAmount, currency: o.currency, paymentMethod: o.paymentMethod,
-        customerHash: o.customerId ? this.pii.pseudonymize(tenantId, o.customerId) : null,
-        placedAt: o.placedAt, sallaUpdatedAt: o.sallaUpdatedAt, syncedAt: new Date(),
-      };
-      await tx.order.upsert({
-        where: { storeId_sallaId: { storeId, sallaId: o.sallaId }, tenantId },
-        create: { tenantId, storeId, sallaId: o.sallaId, ...row }, update: row,
-      });
-      return true;
-    }
-    if (event.startsWith('product.')) {
-      const p = mapProduct(data);
-      if (!p) throw new Error('product payload failed validation');
-      if (event === 'product.deleted') {
-        await tx.product.deleteMany({ where: { tenantId, storeId, sallaId: p.sallaId } });
+    const action = classifyEvent(event);
+    switch (action.kind) {
+      case 'order_upsert': {
+        const o = mapOrder(data);
+        if (!o) throw new Error('order payload failed validation');
+        const existing = await tx.order.findFirst({ where: { tenantId, storeId, sallaId: o.sallaId }, select: { sallaUpdatedAt: true } });
+        // Webhooks can arrive out of order: never let an older snapshot overwrite a newer one.
+        if (existing?.sallaUpdatedAt && o.sallaUpdatedAt && o.sallaUpdatedAt < existing.sallaUpdatedAt) return true;
+        const row = {
+          referenceId: o.referenceId, statusSlug: o.statusSlug,
+          countsAsRevenue: action.revenue ? o.countsAsRevenue : false,
+          totalAmount: o.totalAmount, currency: o.currency, paymentMethod: o.paymentMethod,
+          customerHash: o.customerId ? this.pii.pseudonymize(tenantId, o.customerId) : null,
+          placedAt: o.placedAt, sallaUpdatedAt: o.sallaUpdatedAt, syncedAt: new Date(),
+        };
+        await tx.order.upsert({
+          where: { storeId_sallaId: { storeId, sallaId: o.sallaId }, tenantId },
+          create: { tenantId, storeId, sallaId: o.sallaId, ...row }, update: row,
+        });
         return true;
       }
-      const { sallaId, ...row } = p;
-      await tx.product.upsert({
-        where: { storeId_sallaId: { storeId, sallaId }, tenantId },
-        create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
-      });
-      return true;
-    }
-    if (event.startsWith('category.')) {
-      const c = mapCategory(data);
-      if (!c) throw new Error('category payload failed validation');
-      if (event === 'category.deleted') {
-        await tx.category.deleteMany({ where: { tenantId, storeId, sallaId: c.sallaId } });
+      case 'product_upsert': {
+        const p = mapProduct(data);
+        if (!p) throw new Error('product payload failed validation');
+        const { sallaId, ...row } = p;
+        await tx.product.upsert({
+          where: { storeId_sallaId: { storeId, sallaId }, tenantId },
+          create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
+        });
         return true;
       }
-      const { sallaId, ...row } = c;
-      await tx.category.upsert({
-        where: { storeId_sallaId: { storeId, sallaId }, tenantId },
-        create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
-      });
-      return true;
+      case 'product_delete': {
+        const id = idOf(data);
+        if (id === null) throw new Error('product delete payload has no id');
+        await tx.product.deleteMany({ where: { tenantId, storeId, sallaId: id } });
+        return true;
+      }
+      case 'product_refetch': {
+        const id = idOf(data);
+        if (id === null) throw new Error('product payload has no id');
+        await this.sync.refreshProduct(tenantId, storeId, id.toString());
+        return true;
+      }
+      case 'category_upsert': {
+        const c = mapCategory(data);
+        if (!c) throw new Error('category payload failed validation');
+        const { sallaId, ...row } = c;
+        await tx.category.upsert({
+          where: { storeId_sallaId: { storeId, sallaId }, tenantId },
+          create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
+        });
+        return true;
+      }
+      case 'category_delete': {
+        const id = idOf(data);
+        if (id === null) throw new Error('category delete payload has no id');
+        await tx.category.deleteMany({ where: { tenantId, storeId, sallaId: id } });
+        return true;
+      }
+      case 'uninstall':
+        await tx.sallaConnection.updateMany({
+          where: { tenantId, storeId },
+          data: { status: 'REVOKED', revokedAt: new Date(), accessTokenEnc: DEAD_ENVELOPE, refreshTokenEnc: null },
+        });
+        this.log.log(`Store ${storeId} uninstalled the app; tokens destroyed`);
+        return true;
+      default:
+        return false; // kept as immutable evidence, marked IGNORED
     }
-    if (event === 'app.uninstalled') {
-      await tx.sallaConnection.updateMany({
-        where: { tenantId, storeId },
-        data: { status: 'REVOKED', revokedAt: new Date(), accessTokenEnc: DEAD_ENVELOPE, refreshTokenEnc: null },
-      });
-      this.log.log(`Store ${storeId} uninstalled the app; tokens destroyed`);
-      return true;
-    }
-    return false; // unsubscribed/unknown event: kept as evidence, not processed
   }
+}
+
+/** Extracts a numeric Salla id from an untrusted payload without requiring the rest of the object. */
+function idOf(data: unknown): bigint | null {
+  const v = (data as { id?: unknown } | null)?.id;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? BigInt(v) : typeof v === 'string' && /^\d{1,18}$/.test(v) ? BigInt(v) : null;
 }

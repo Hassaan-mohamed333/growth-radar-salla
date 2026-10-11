@@ -11,7 +11,8 @@ import { sha256Hex } from './pkce';
 import { SallaApiError } from './salla-api.client';
 import { SallaAuthError } from './salla-token.service';
 import { SallaClientService } from './salla-client.service';
-import { SYNC_RESOURCES, SyncService, type SyncJob } from './sync.service';
+import { SYNC_RESOURCES, SyncService, type SyncJob, type SyncResource } from './sync.service';
+import type { Tx } from '../infra/prisma.service';
 import { UnrecoverableError } from 'bullmq';
 
 const PER_PAGE = 50;
@@ -31,7 +32,11 @@ export class SyncProcessor extends WorkerHost {
   }
 
   async process(job: Job<SyncJob>): Promise<void> {
-    const { tenantId, storeId, resource, page, runId } = job.data;
+    const { tenantId, storeId, resource, page, runId, itemId } = job.data;
+    if (itemId) {
+      if (resource !== 'products') throw new UnrecoverableError('item refresh supports products only');
+      return this.processItem(tenantId, storeId, resource, itemId);
+    }
     let body: unknown;
     try {
       body = await this.salla.get(tenantId, storeId, `/${resource}`, { page, per_page: PER_PAGE });
@@ -55,41 +60,7 @@ export class SyncProcessor extends WorkerHost {
       });
       // 2) Normalised state, validated item by item (one bad item never poisons the page).
       let skipped = 0;
-      for (const raw of data) {
-        if (resource === 'orders') {
-          const o = mapOrder(raw);
-          if (!o) { skipped++; continue; }
-          const row = {
-            referenceId: o.referenceId, statusSlug: o.statusSlug, countsAsRevenue: o.countsAsRevenue,
-            totalAmount: o.totalAmount, currency: o.currency, paymentMethod: o.paymentMethod,
-            customerHash: o.customerId ? this.pii.pseudonymize(tenantId, o.customerId) : null,
-            placedAt: o.placedAt, sallaUpdatedAt: o.sallaUpdatedAt, syncedAt: new Date(),
-          };
-          await tx.order.upsert({
-            where: { storeId_sallaId: { storeId, sallaId: o.sallaId }, tenantId },
-            create: { tenantId, storeId, sallaId: o.sallaId, ...row },
-            update: row,
-          });
-        } else if (resource === 'products') {
-          const p = mapProduct(raw);
-          if (!p) { skipped++; continue; }
-          const { sallaId, ...row } = p;
-          await tx.product.upsert({
-            where: { storeId_sallaId: { storeId, sallaId }, tenantId },
-            create: { tenantId, storeId, sallaId, ...row },
-            update: { ...row, syncedAt: new Date() },
-          });
-        } else {
-          const c = mapCategory(raw);
-          if (!c) { skipped++; continue; }
-          const { sallaId, ...row } = c;
-          await tx.category.upsert({
-            where: { storeId_sallaId: { storeId, sallaId }, tenantId },
-            create: { tenantId, storeId, sallaId, ...row },
-            update: { ...row, syncedAt: new Date() },
-          });
-        }
-      }
+      for (const raw of data) if (!(await this.upsert(tx, tenantId, storeId, resource, raw))) skipped++;
       if (skipped) this.log.warn(`${resource} page ${page}: skipped ${skipped} invalid items (store ${storeId})`);
     });
 
@@ -107,5 +78,63 @@ export class SyncProcessor extends WorkerHost {
       tx.sallaConnection.updateMany({ where: { tenantId, storeId }, data: { lastSyncAt: new Date() } }),
     );
     await this.auditQueue.add('audit', { tenantId, storeId }, { jobId: `audit_${storeId}_${runId}` });
+  }
+
+  /** Authoritative single-object refresh (after a partial webhook). Same validation + evidence as page sync. */
+  private async processItem(tenantId: string, storeId: string, resource: 'products', itemId: string): Promise<void> {
+    if (!/^\d{1,18}$/.test(itemId)) throw new UnrecoverableError('bad item id');
+    let body: unknown;
+    try {
+      body = await this.salla.get(tenantId, storeId, `/${resource}/${itemId}`);
+    } catch (e) {
+      if (e instanceof SallaApiError) {
+        if (e.status === 404) return; // deleted meanwhile
+        throw e.toJobError();
+      }
+      if (e instanceof SallaAuthError) throw new UnrecoverableError(e.message);
+      throw e;
+    }
+    const item = (body as { data?: unknown } | null)?.data;
+    await this.db.withTenant(tenantId, async (tx) => {
+      await tx.rawIngestion.create({
+        data: { tenantId, storeId, source: 'SALLA_API', requestRef: `${resource}/${itemId}`, payload: body as Prisma.InputJsonValue, payloadSha256: sha256Hex(JSON.stringify(body)) },
+      });
+      if (!(await this.upsert(tx, tenantId, storeId, resource, item))) throw new UnrecoverableError('item failed validation');
+    });
+  }
+
+  /** Validates one raw API object and upserts it. Returns false (never throws) when the object is invalid. */
+  private async upsert(tx: Tx, tenantId: string, storeId: string, resource: SyncResource, raw: unknown): Promise<boolean> {
+    if (resource === 'orders') {
+      const o = mapOrder(raw);
+      if (!o) return false;
+      const row = {
+        referenceId: o.referenceId, statusSlug: o.statusSlug, countsAsRevenue: o.countsAsRevenue,
+        totalAmount: o.totalAmount, currency: o.currency, paymentMethod: o.paymentMethod,
+        customerHash: o.customerId ? this.pii.pseudonymize(tenantId, o.customerId) : null,
+        placedAt: o.placedAt, sallaUpdatedAt: o.sallaUpdatedAt, syncedAt: new Date(),
+      };
+      await tx.order.upsert({
+        where: { storeId_sallaId: { storeId, sallaId: o.sallaId }, tenantId },
+        create: { tenantId, storeId, sallaId: o.sallaId, ...row }, update: row,
+      });
+    } else if (resource === 'products') {
+      const p = mapProduct(raw);
+      if (!p) return false;
+      const { sallaId, ...row } = p;
+      await tx.product.upsert({
+        where: { storeId_sallaId: { storeId, sallaId }, tenantId },
+        create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
+      });
+    } else {
+      const c = mapCategory(raw);
+      if (!c) return false;
+      const { sallaId, ...row } = c;
+      await tx.category.upsert({
+        where: { storeId_sallaId: { storeId, sallaId }, tenantId },
+        create: { tenantId, storeId, sallaId, ...row }, update: { ...row, syncedAt: new Date() },
+      });
+    }
+    return true;
   }
 }
