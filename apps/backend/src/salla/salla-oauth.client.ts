@@ -12,6 +12,8 @@ const tokenResponse = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(1).optional(),
   expires_in: z.coerce.number().int().positive().optional(),
+  /** Some flows (e.g. Easy mode) return an absolute unix timestamp as `expires`. */
+  expires: z.coerce.number().positive().optional(),
   scope: z.string().optional(),
 });
 
@@ -37,6 +39,16 @@ export interface SallaMerchant {
   id: string;
   name: string;
   domain: string | null;
+}
+
+/** `expires_in` (seconds from now) or `expires` (unix timestamp, or seconds if small). */
+export function tokenExpiry(
+  t: { expires_in?: number; expires?: number },
+  now = Date.now(),
+): Date | null {
+  if (t.expires_in) return new Date(now + t.expires_in * 1000);
+  if (t.expires) return t.expires > 1e9 ? new Date(t.expires * 1000) : new Date(now + t.expires * 1000);
+  return null;
 }
 
 export class SallaOAuthError extends Error {
@@ -100,7 +112,7 @@ export class SallaOAuthClient {
     return {
       accessToken: t.access_token,
       refreshToken: t.refresh_token ?? null,
-      expiresAt: t.expires_in ? new Date(Date.now() + t.expires_in * 1000) : null,
+      expiresAt: tokenExpiry(t),
       scopes: t.scope ? t.scope.split(/[\s,]+/).filter(Boolean) : [],
     };
   }
@@ -132,7 +144,7 @@ export class SallaOAuthClient {
     return {
       accessToken: t.access_token,
       refreshToken: t.refresh_token ?? null,
-      expiresAt: t.expires_in ? new Date(Date.now() + t.expires_in * 1000) : null,
+      expiresAt: tokenExpiry(t),
       scopes: t.scope ? t.scope.split(/[\s,]+/).filter(Boolean) : [],
     };
   }

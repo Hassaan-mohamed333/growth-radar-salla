@@ -81,9 +81,15 @@ export const envSchema = z.object({
     .default('http://localhost:4000/api/v1/auth/salla/callback'),
   /**
    * Space-separated. `offline_access` makes Salla issue a refresh token;
-   * `orders.read` is required by the sales sync, `products.read` by the catalogue sync.
+   * `settings.read` is needed for store info at login, `orders.read` by the sales sync,
+   * `products.read` by the catalogue sync. Names must match the app's permissions in the
+   * Salla Partners portal (the docs list `settings.read`; read-only orders/products
+   * scope names should be confirmed against the portal).
    */
-  SALLA_OAUTH_SCOPES: z.string().min(1).default('offline_access orders.read products.read'),
+  SALLA_OAUTH_SCOPES: z
+    .string()
+    .min(1)
+    .default('offline_access settings.read orders.read products.read'),
   SALLA_WEBHOOK_SECRET: z.string().min(16, 'SALLA_WEBHOOK_SECRET looks too short'),
   SALLA_WEBHOOK_STRATEGY: z.enum(['signature', 'token']).default('signature'),
 });

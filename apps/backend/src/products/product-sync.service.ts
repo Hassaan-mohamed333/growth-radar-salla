@@ -6,6 +6,8 @@ import { toProductValues } from './product-mapping';
 
 /** Upserts per transaction: keeps each transaction short on large catalogues. */
 const CHUNK = 100;
+/** Below this size the mass-deletion guard does not apply (small shops do clear out). */
+const MASS_DELETE_MIN_CATALOGUE = 20;
 
 export interface ProductSyncResult {
   fetched: number;
@@ -79,6 +81,16 @@ export class ProductSyncService {
       .filter((k) => !seenIds.has(k.sallaProductId))
       .map((k) => k.sallaProductId);
     if (missing.length === 0) return 0;
+
+    // Soft-deleting most of a large catalogue in one pass is far more likely a partial or
+    // misparsed listing than a merchant clearing their store (product.deleted webhooks
+    // cover deletions one by one). Keep the rows and surface it.
+    if (known.length >= MASS_DELETE_MIN_CATALOGUE && missing.length > known.length / 2) {
+      this.logger.warn(
+        `Store ${storeId}: listing is missing ${missing.length}/${known.length} products; keeping rows`,
+      );
+      return 0;
+    }
 
     // An empty listing next to a populated table is more likely an API hiccup than
     // a merchant deleting everything; product.deleted webhooks cover the real case.

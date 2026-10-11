@@ -247,6 +247,30 @@ describe('Salla webhooks over HTTP (signature + idempotency + handlers)', () => 
     ).toBe(1);
   });
 
+  it('re-syncs sales for status changes but not for shipment events', async () => {
+    const status = signed('order.status.updated', { date: { date: '2026-10-09 10:00:00.000000' } });
+    expect((await post(status.raw, status.headers)).status).toBe(200);
+    expect(salesSync.syncRange).toHaveBeenCalledTimes(1);
+
+    for (const event of ['order.shipment.creating', 'order.shipment.cancelled']) {
+      const ev = signed(event, { id: 1 });
+      expect((await post(ev.raw, ev.headers)).json).toEqual({ status: 'ok' });
+    }
+    expect(salesSync.syncRange).toHaveBeenCalledTimes(1); // unchanged
+  });
+
+  it('handles the product events Salla documents (available / unavailable)', async () => {
+    const off = signed('product.unavailable', { ...productPayload(9100), status: 'out', quantity: 0 });
+    await post(off.raw, off.headers);
+    let p = await prisma.product.findFirstOrThrow({ where: { storeId: s.storeId, sallaProductId: '9100' } });
+    expect(p.status).toBe('OUT');
+
+    const on = signed('product.available', { ...productPayload(9100), status: 'sale', quantity: 5 });
+    await post(on.raw, on.headers);
+    p = await prisma.product.findFirstOrThrow({ where: { id: p.id } });
+    expect(p).toMatchObject({ status: 'SALE', quantity: 5 });
+  });
+
   it('answers 200 for unrelated events and for merchants we do not know', async () => {
     const unrelated = signed('customer.created', { id: 1 });
     expect((await post(unrelated.raw, unrelated.headers)).status).toBe(200);

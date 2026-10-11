@@ -19,7 +19,8 @@ export class OrderWebhookHandler {
   ) {}
 
   static handles(event: string): boolean {
-    return event.startsWith('order.');
+    // Shipment events never change sales; skip them instead of re-reading orders.
+    return event.startsWith('order.') && !event.startsWith('order.shipment.');
   }
 
   /**

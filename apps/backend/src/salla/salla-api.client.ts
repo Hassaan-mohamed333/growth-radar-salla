@@ -34,12 +34,35 @@ const ordersPage = z.object({
     .nullish(),
 });
 
+/**
+ * Salla's pagination object differs between docs and endpoints
+ * ({currentPage,totalPages,links.next} vs {current,next}), so every field is optional
+ * and `hasMorePages` decides conservatively.
+ */
 const pagination = z
   .object({
     currentPage: z.coerce.number().optional(),
     totalPages: z.coerce.number().optional(),
+    next: z.string().nullish(),
+    links: z.object({ next: z.string().nullish() }).nullish(),
   })
   .nullish();
+
+type Pagination = z.infer<typeof pagination>;
+
+/**
+ * Whether to request another page. Never assumes "one page" from missing metadata:
+ * a silent truncation would make the catalogue sync soft-delete the products it did
+ * not see. With no usable metadata it keeps going until an empty page (or MAX_PAGES,
+ * which marks the listing incomplete).
+ */
+function hasMorePages(page: number, itemCount: number, p: Pagination): boolean {
+  if (itemCount === 0) return false;
+  if (p?.totalPages !== undefined && Number.isFinite(p.totalPages)) return page < p.totalPages;
+  if (p?.links) return Boolean(p.links.next);
+  if (p?.next !== undefined) return Boolean(p.next);
+  return true;
+}
 
 /** Salla returns money as `{ amount, currency }`; some fields (cost) may be a bare number. */
 const moneyLike = z.union([money, z.coerce.number()]).nullish();
@@ -63,9 +86,14 @@ const productSchema = z.object({
   currency: z.string().nullish(),
   /** null / absent means unlimited stock. */
   quantity: z.coerce.number().nullish(),
+  /** When true the `quantity` field is meaningless (it can be 0 or stale). */
+  unlimited_quantity: z.boolean().nullish(),
   status: z.string().nullish(),
   url: z.string().nullish(),
   main_image: z.string().nullish(),
+  images: z
+    .array(z.object({ url: z.string().nullish(), main: z.boolean().nullish() }))
+    .nullish(),
 });
 
 const productsPage = z.object({
@@ -143,10 +171,14 @@ export function parseSallaProduct(raw: unknown): SallaProduct | null {
     currency: (p.currency ?? currencyOf(p.price) ?? currencyOf(p.regular_price) ?? null)
       ?.toUpperCase()
       .slice(0, 3) ?? null,
-    quantity: p.quantity === null || p.quantity === undefined ? null : Math.max(0, Math.trunc(p.quantity)),
+    quantity:
+      p.unlimited_quantity === true || p.quantity === null || p.quantity === undefined
+        ? null
+        : Math.max(0, Math.trunc(p.quantity)),
     statusSlug: p.status?.toLowerCase() ?? null,
     url: p.url ?? null,
-    imageUrl: p.main_image ?? null,
+    imageUrl:
+      p.main_image ?? p.images?.find((i) => i.main && i.url)?.url ?? p.images?.[0]?.url ?? null,
   };
 }
 
@@ -200,10 +232,7 @@ export class SallaApiClient {
         });
       }
 
-      const p = parsed.data.pagination;
-      const current = p?.currentPage ?? page;
-      const total = p?.totalPages ?? current;
-      if (parsed.data.data.length === 0 || current >= total) return orders;
+      if (!hasMorePages(page, parsed.data.data.length, parsed.data.pagination)) return orders;
     }
 
     this.logger.warn(`Order listing stopped at ${MAX_PAGES} pages`);
@@ -234,10 +263,7 @@ export class SallaApiClient {
         else skipped += 1;
       }
 
-      const p = parsed.data.pagination;
-      const current = p?.currentPage ?? page;
-      const total = p?.totalPages ?? current;
-      if (parsed.data.data.length === 0 || current >= total) {
+      if (!hasMorePages(page, parsed.data.data.length, parsed.data.pagination)) {
         return { products, complete: true, skipped };
       }
     }

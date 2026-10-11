@@ -114,6 +114,22 @@ describe('catalogue sync against real PostgreSQL', () => {
     expect(await prisma.product.count({ where: { storeId: s.storeId, status: 'DELETED' } })).toBe(0);
   });
 
+  it('refuses to soft-delete most of a large catalogue from a single listing', async () => {
+    const s = await seedStore(prisma);
+    const all = Array.from({ length: 40 }, (_, i) => sp(String(i + 1)));
+    listing(all);
+    await service.syncStore(s.storeId);
+
+    // Only 10 of 40 come back: looks like a partial/misparsed listing, not 30 deletions.
+    listing(all.slice(0, 10));
+    expect((await service.syncStore(s.storeId)).removed).toBe(0);
+    expect(await prisma.product.count({ where: { storeId: s.storeId, status: 'DELETED' } })).toBe(0);
+
+    // 10 of 40 missing (25%) is plausible: those are removed.
+    listing(all.slice(0, 30));
+    expect((await service.syncStore(s.storeId)).removed).toBe(10);
+  });
+
   it('handles a catalogue larger than one transaction chunk', async () => {
     const s = await seedStore(prisma);
     listing(Array.from({ length: 250 }, (_, i) => sp(String(i + 1))));
