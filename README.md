@@ -36,7 +36,7 @@ growth-radar-salla/
 cp .env.example .env              # fill SALLA_*, generate keys: openssl rand -base64 32 / openssl rand -hex 32
 docker compose up -d
 pnpm install
-pnpm --filter @radar/api exec prisma migrate deploy   # use MIGRATION_DATABASE_URL (owner role)
+pnpm db:migrate                   # runs prisma migrate deploy as the owner role (MIGRATION_DATABASE_URL)
 pnpm dev                          # api :4000, web :3000
 pnpm test                         # unit tests (shared + api)
 pnpm --filter @radar/api test:e2e # end-to-end (needs local postgres+redis; see test/run-e2e.sh)
