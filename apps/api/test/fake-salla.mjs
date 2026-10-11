@@ -24,7 +24,7 @@ http.createServer((req, res) => {
     }
     const user = byToken.get((req.headers.authorization ?? '').replace('Bearer ', ''));
     if (!user) return send(res, 401, {});
-    if (u.pathname === '/admin/v2/oauth2/user/info')
+    if (u.pathname === '/oauth2/user/info')
       return send(res, 200, { data: { id: user.uid, name: user.name, email: `${user.uid}@example.com`, merchant: { id: user.mid, name: user.name, domain: `https://s${user.mid}.example` } } });
     const page = Number(u.searchParams.get('page') ?? 1), per = Number(u.searchParams.get('per_page') ?? 50);
     const list = { '/admin/v2/orders': orders, '/admin/v2/products': [{ id: 1, name: 'Widget', sku: 'W1', price: { amount: 100, currency: 'SAR' }, quantity: 5, status: 'sale' }], '/admin/v2/categories': [{ id: 3, name: 'Cat' }] }[u.pathname];

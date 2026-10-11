@@ -18,6 +18,7 @@ const schema = z
     SALLA_CLIENT_SECRET: z.string().min(1),
     SALLA_AUTH_URL: z.string().url().default('https://accounts.salla.sa/oauth2/auth'),
     SALLA_TOKEN_URL: z.string().url().default('https://accounts.salla.sa/oauth2/token'),
+    SALLA_USERINFO_URL: z.string().url().default('https://accounts.salla.sa/oauth2/user/info'),
     SALLA_API_BASE: z.string().url().default('https://api.salla.dev/admin/v2'),
     SALLA_SCOPES: z.string().default('offline_access'),
     SALLA_USE_PKCE: bool.default('true'),

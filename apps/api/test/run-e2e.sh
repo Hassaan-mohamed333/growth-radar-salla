@@ -8,7 +8,7 @@ export DATABASE_URL="${E2E_DATABASE_URL:-postgresql://radar_app:radar_app_pw@loc
 export OWNER_DATABASE_URL="${E2E_OWNER_DATABASE_URL:-postgresql://radar_owner:o@localhost:5439/radar}"
 export REDIS_URL=redis://localhost:6390
 export SALLA_CLIENT_ID=cid SALLA_CLIENT_SECRET=csecret SALLA_AUTH_URL=http://localhost:4999/auth
-export SALLA_TOKEN_URL=http://localhost:4999/token SALLA_API_BASE=http://localhost:4999/admin/v2
+export SALLA_USERINFO_URL=http://localhost:4999/oauth2/user/info SALLA_TOKEN_URL=http://localhost:4999/token SALLA_API_BASE=http://localhost:4999/admin/v2
 export SALLA_WEBHOOK_SECRET=whsec-test-secret-0123456789 SALLA_WEBHOOK_STRATEGY=signature
 export TOKEN_ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)"
 export SESSION_JWT_SECRET="$(openssl rand -hex 32)" PII_HASH_KEY="$(openssl rand -hex 32)"

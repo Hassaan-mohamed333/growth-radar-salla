@@ -43,7 +43,7 @@ export class SallaOnboardingService {
   ) {}
 
   async fetchUserInfo(accessToken: string): Promise<SallaUserInfo> {
-    return userInfoSchema.parse(await this.api.get(accessToken, '/oauth2/user/info')).data;
+    return userInfoSchema.parse(await this.api.getAbsolute(accessToken, this.env.SALLA_USERINFO_URL)).data;
   }
 
   /**

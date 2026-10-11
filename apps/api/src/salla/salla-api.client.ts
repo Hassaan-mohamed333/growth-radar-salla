@@ -34,6 +34,11 @@ export class SallaApiClient {
     return this.request(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
   }
 
+  /** GET an absolute URL taken from OUR config (e.g. the accounts.salla.sa user-info endpoint). Never from user input. */
+  async getAbsolute(accessToken: string, url: string): Promise<unknown> {
+    return this.request(new URL(url), { headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+  }
+
   async postForm(url: string, form: Record<string, string>): Promise<unknown> {
     return this.request(new URL(url), {
       method: 'POST',
