@@ -164,6 +164,20 @@ describe('catalogue sync against real PostgreSQL', () => {
     expect(await prisma.product.count()).toBe(0);
   });
 
+  it('writes nothing once the store is uninstalled while Salla is still being read', async () => {
+    const s = await seedStore(prisma);
+    listProducts.mockImplementation(async () => {
+      // The uninstall webhook lands during the slow Salla call.
+      await prisma.store.update({ where: { id: s.storeId }, data: { status: 'UNINSTALLED' } });
+      return { products: [sp('1'), sp('2')], complete: true, skipped: 0 };
+    });
+
+    const res = await service.syncStore(s.storeId);
+
+    expect(res.removed).toBe(0);
+    expect(await prisma.product.count({ where: { storeId: s.storeId } })).toBe(0);
+  });
+
   describe('product webhooks', () => {
     it('upserts from the payload and soft-deletes on product.deleted, resolving the store by merchant', async () => {
       const s = await seedStore(prisma);
