@@ -7,6 +7,11 @@ const HTTP_TIMEOUT_MS = 15_000;
 const PER_PAGE = 30;
 /** Hard stop so a misbehaving pagination object can never loop forever. */
 const MAX_PAGES = 500;
+/**
+ * Stricter stop for responses with no usable pagination metadata: without it we cannot
+ * tell "more pages" from "same page again", so we only keep going for a small number.
+ */
+const MAX_PAGES_WITHOUT_METADATA = 20;
 
 const money = z.object({ amount: z.coerce.number(), currency: z.string().optional() });
 
@@ -24,12 +29,15 @@ const orderSchema = z.object({
     .nullish(),
 });
 
+/** `.nullish()` goes outside the coerce: `z.coerce.number()` turns null into 0. */
+const pageCount = z.coerce.number().nullish();
+
 const ordersPage = z.object({
   data: z.array(orderSchema),
   pagination: z
     .object({
-      currentPage: z.coerce.number().optional(),
-      totalPages: z.coerce.number().optional(),
+      currentPage: pageCount,
+      totalPages: pageCount,
     })
     .nullish(),
 });
@@ -41,8 +49,8 @@ const ordersPage = z.object({
  */
 const pagination = z
   .object({
-    currentPage: z.coerce.number().optional(),
-    totalPages: z.coerce.number().optional(),
+    currentPage: pageCount,
+    totalPages: pageCount,
     next: z.string().nullish(),
     links: z.object({ next: z.string().nullish() }).nullish(),
   })
@@ -50,15 +58,20 @@ const pagination = z
 
 type Pagination = z.infer<typeof pagination>;
 
+/** Whether the response carries any field that says where paging ends. */
+function hasPagingMetadata(p: Pagination): boolean {
+  return (p?.totalPages != null && Number.isFinite(p.totalPages)) || p?.links != null || p?.next != null;
+}
+
 /**
  * Whether to request another page. Never assumes "one page" from missing metadata:
  * a silent truncation would make the catalogue sync soft-delete the products it did
- * not see. With no usable metadata it keeps going until an empty page (or MAX_PAGES,
- * which marks the listing incomplete).
+ * not see. With no usable metadata it keeps going until an empty page (or the
+ * metadata-less cap, which marks the listing incomplete).
  */
 function hasMorePages(page: number, itemCount: number, p: Pagination): boolean {
   if (itemCount === 0) return false;
-  if (p?.totalPages !== undefined && Number.isFinite(p.totalPages)) return page < p.totalPages;
+  if (p?.totalPages != null && Number.isFinite(p.totalPages)) return page < p.totalPages;
   if (p?.links) return Boolean(p.links.next);
   if (p?.next !== undefined) return Boolean(p.next);
   return true;
@@ -178,7 +191,10 @@ export function parseSallaProduct(raw: unknown): SallaProduct | null {
     statusSlug: p.status?.toLowerCase() ?? null,
     url: p.url ?? null,
     imageUrl:
-      p.main_image ?? p.images?.find((i) => i.main && i.url)?.url ?? p.images?.[0]?.url ?? null,
+      p.main_image ??
+      p.images?.find((i) => i.main && i.url)?.url ??
+      p.images?.find((i) => i.url)?.url ??
+      null,
   };
 }
 
@@ -207,6 +223,7 @@ export class SallaApiClient {
     range: { fromDate: string; toDate: string },
   ): Promise<SallaOrder[]> {
     const orders: SallaOrder[] = [];
+    const seen = new Set<string>();
 
     for (let page = 1; page <= MAX_PAGES; page++) {
       const body = await this.fetchPage(accessToken, 'orders', {
@@ -220,7 +237,12 @@ export class SallaApiClient {
       const parsed = ordersPage.safeParse(body);
       if (!parsed.success) throw new SallaApiError(502, 'Unexpected orders response shape');
 
+      let fresh = 0;
       for (const o of parsed.data.data) {
+        // A repeated order would be counted twice in the sales totals.
+        if (seen.has(o.id)) continue;
+        seen.add(o.id);
+        fresh += 1;
         orders.push({
           id: o.id,
           localDate: o.date.date.slice(0, 10),
@@ -232,7 +254,13 @@ export class SallaApiClient {
         });
       }
 
+      // A page of only repeats means the endpoint is ignoring `page`: more requests won't help.
+      if (fresh === 0) return orders;
       if (!hasMorePages(page, parsed.data.data.length, parsed.data.pagination)) return orders;
+      if (!hasPagingMetadata(parsed.data.pagination) && page >= MAX_PAGES_WITHOUT_METADATA) {
+        this.logger.warn(`Order listing without pagination metadata stopped at page ${page}`);
+        return orders;
+      }
     }
 
     this.logger.warn(`Order listing stopped at ${MAX_PAGES} pages`);
@@ -246,6 +274,7 @@ export class SallaApiClient {
    */
   async listProducts(accessToken: string): Promise<SallaProductListing> {
     const products: SallaProduct[] = [];
+    const seen = new Set<string>();
     let skipped = 0;
 
     for (let page = 1; page <= MAX_PAGES; page++) {
@@ -257,14 +286,31 @@ export class SallaApiClient {
       const parsed = productsPage.safeParse(body);
       if (!parsed.success) throw new SallaApiError(502, 'Unexpected products response shape');
 
+      let fresh = 0;
       for (const raw of parsed.data.data) {
         const product = parseSallaProduct(raw);
-        if (product) products.push(product);
-        else skipped += 1;
+        if (!product) {
+          skipped += 1;
+          continue;
+        }
+        if (seen.has(product.id)) continue;
+        seen.add(product.id);
+        fresh += 1;
+        products.push(product);
       }
 
+      // A page of only repeats (or only malformed entries) is not a finished listing:
+      // report it incomplete so nothing is soft-deleted on the strength of it.
+      if (fresh === 0 && parsed.data.data.length > 0) {
+        this.logger.warn(`Product listing stopped at page ${page}: no new entries`);
+        return { products, complete: false, skipped };
+      }
       if (!hasMorePages(page, parsed.data.data.length, parsed.data.pagination)) {
         return { products, complete: true, skipped };
+      }
+      if (!hasPagingMetadata(parsed.data.pagination) && page >= MAX_PAGES_WITHOUT_METADATA) {
+        this.logger.warn(`Product listing without pagination metadata stopped at page ${page}`);
+        return { products, complete: false, skipped };
       }
     }
 

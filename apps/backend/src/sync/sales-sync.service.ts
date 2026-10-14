@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env';
+import { writeIfStoreActive } from '../prisma/active-store-write';
 import { PrismaService } from '../prisma/prisma.service';
 import { SallaApiClient } from '../salla/salla-api.client';
 import { SallaConnectionsService } from '../salla/salla-connections.service';
@@ -53,23 +54,27 @@ export class SalesSyncService {
     });
     const totals = aggregateOrders(orders, days);
 
-    await this.prisma.$transaction(
-      totals.map((t) => {
-        const date = new Date(`${t.date}T00:00:00.000Z`);
-        const values = {
-          ordersCount: t.ordersCount,
-          unitsSold: t.unitsSold,
-          grossRevenue: t.grossRevenue,
-          refundedRevenue: t.refundedRevenue,
-          currency: store.currency,
-        };
-        return this.prisma.salesSnapshot.upsert({
-          where: { storeId_date: { storeId, date } },
-          create: { tenantId: store.tenantId, storeId, date, ...values },
-          update: values,
-        });
-      }),
+    // Re-checked inside the write: the store may have been uninstalled during the Salla call.
+    const written = await writeIfStoreActive(this.prisma, storeId, (tx) =>
+      Promise.all(
+        totals.map((t) => {
+          const date = new Date(`${t.date}T00:00:00.000Z`);
+          const values = {
+            ordersCount: t.ordersCount,
+            unitsSold: t.unitsSold,
+            grossRevenue: t.grossRevenue,
+            refundedRevenue: t.refundedRevenue,
+            currency: store.currency,
+          };
+          return tx.salesSnapshot.upsert({
+            where: { storeId_date: { storeId, date } },
+            create: { tenantId: store.tenantId, storeId, date, ...values },
+            update: values,
+          });
+        }),
+      ),
     );
+    if (written === null) return { days: 0, orders: 0 };
 
     return { days: totals.length, orders: orders.length };
   }

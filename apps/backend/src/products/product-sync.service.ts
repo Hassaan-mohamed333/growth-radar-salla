@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { writeIfStoreActive } from '../prisma/active-store-write';
 import { PrismaService } from '../prisma/prisma.service';
 import { SallaApiClient, type SallaProduct } from '../salla/salla-api.client';
 import { SallaConnectionsService } from '../salla/salla-connections.service';
@@ -40,7 +41,9 @@ export class ProductSyncService {
     const listing = await this.api.listProducts(accessToken);
 
     for (let i = 0; i < listing.products.length; i += CHUNK) {
-      await this.upsertMany(store, listing.products.slice(i, i + CHUNK));
+      // Stops as soon as the store is uninstalled, rather than writing the rest of the catalogue.
+      const written = await this.upsertMany(store, listing.products.slice(i, i + CHUNK));
+      if (!written) return { fetched: listing.products.length, skipped: listing.skipped, removed: 0 };
     }
 
     const removed = listing.complete ? await this.markMissingDeleted(storeId, listing.products) : 0;
@@ -56,8 +59,7 @@ export class ProductSyncService {
   async upsertOne(storeId: string, product: SallaProduct): Promise<boolean> {
     const store = await this.loadStore(storeId);
     if (!store) return false;
-    await this.upsertMany(store, [product]);
-    return true;
+    return this.upsertMany(store, [product]);
   }
 
   /** Soft-deletes: competitor links and recommendations that reference it stay intact. */
@@ -99,34 +101,40 @@ export class ProductSyncService {
       return 0;
     }
 
-    const res = await this.prisma.product.updateMany({
-      where: { storeId, sallaProductId: { in: missing }, status: { not: 'DELETED' } },
-      data: { status: 'DELETED', syncedAt: new Date() },
-    });
-    return res.count;
+    const res = await writeIfStoreActive(this.prisma, storeId, (tx) =>
+      tx.product.updateMany({
+        where: { storeId, sallaProductId: { in: missing }, status: { not: 'DELETED' } },
+        data: { status: 'DELETED', syncedAt: new Date() },
+      }),
+    );
+    return res?.count ?? 0;
   }
 
+  /** False when the store was uninstalled before the write could run. */
   private async upsertMany(
     store: { tenantId: string; storeId: string; currency: string },
     products: readonly SallaProduct[],
-  ): Promise<void> {
-    if (products.length === 0) return;
+  ): Promise<boolean> {
+    if (products.length === 0) return true;
     const now = new Date();
-    await this.prisma.$transaction(
-      products.map((p) => {
-        const values = { ...toProductValues(p, store.currency), syncedAt: now };
-        return this.prisma.product.upsert({
-          where: { storeId_sallaProductId: { storeId: store.storeId, sallaProductId: p.id } },
-          create: {
-            tenantId: store.tenantId,
-            storeId: store.storeId,
-            sallaProductId: p.id,
-            ...values,
-          },
-          update: values,
-        });
-      }),
+    const written = await writeIfStoreActive(this.prisma, store.storeId, (tx) =>
+      Promise.all(
+        products.map((p) => {
+          const values = { ...toProductValues(p, store.currency), syncedAt: now };
+          return tx.product.upsert({
+            where: { storeId_sallaProductId: { storeId: store.storeId, sallaProductId: p.id } },
+            create: {
+              tenantId: store.tenantId,
+              storeId: store.storeId,
+              sallaProductId: p.id,
+              ...values,
+            },
+            update: values,
+          });
+        }),
+      ),
     );
+    return written !== null;
   }
 
   private async loadStore(storeId: string) {

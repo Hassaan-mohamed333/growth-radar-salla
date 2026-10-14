@@ -8,13 +8,17 @@ const TOKEN_URL = 'https://accounts.salla.sa/oauth2/token';
 const USER_INFO_URL = 'https://accounts.salla.sa/oauth2/user/info';
 const HTTP_TIMEOUT_MS = 10_000;
 
+/**
+ * `.nullish()` goes outside the coerce: `z.coerce.number()` turns null into 0, which
+ * would reject an otherwise usable token response.
+ */
 const tokenResponse = z.object({
   access_token: z.string().min(1),
-  refresh_token: z.string().min(1).optional(),
-  expires_in: z.coerce.number().int().positive().optional(),
-  /** Some flows (e.g. Easy mode) return an absolute unix timestamp as `expires`. */
-  expires: z.coerce.number().positive().optional(),
-  scope: z.string().optional(),
+  refresh_token: z.string().min(1).nullish(),
+  expires_in: z.coerce.number().int().positive().nullish(),
+  /** Some flows (e.g. Easy mode) return an absolute timestamp as `expires`. */
+  expires: z.coerce.number().positive().nullish(),
+  scope: z.string().nullish(),
 });
 
 const userInfoResponse = z.object({
@@ -41,14 +45,23 @@ export interface SallaMerchant {
   domain: string | null;
 }
 
-/** `expires_in` (seconds from now) or `expires` (unix timestamp, or seconds if small). */
+/** Unix timestamps in ms are above this; in seconds they are above 1e9 (year 2001+). */
+const MS_TIMESTAMP_FLOOR = 1e12;
+const SECONDS_TIMESTAMP_FLOOR = 1e9;
+
+/**
+ * `expires_in` (seconds from now), or `expires` as an absolute unix timestamp in
+ * seconds or milliseconds, or as a small relative number of seconds.
+ */
 export function tokenExpiry(
-  t: { expires_in?: number; expires?: number },
+  t: { expires_in?: number | null; expires?: number | null },
   now = Date.now(),
 ): Date | null {
   if (t.expires_in) return new Date(now + t.expires_in * 1000);
-  if (t.expires) return t.expires > 1e9 ? new Date(t.expires * 1000) : new Date(now + t.expires * 1000);
-  return null;
+  if (!t.expires) return null;
+  if (t.expires > MS_TIMESTAMP_FLOOR) return new Date(t.expires);
+  if (t.expires > SECONDS_TIMESTAMP_FLOOR) return new Date(t.expires * 1000);
+  return new Date(now + t.expires * 1000);
 }
 
 export class SallaOAuthError extends Error {

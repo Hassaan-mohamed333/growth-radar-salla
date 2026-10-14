@@ -22,10 +22,12 @@ function setup(opts: {
   store?: { tenantId: string; currency: string; status: string } | null;
   listing?: { products: SallaProduct[]; complete: boolean; skipped: number };
   known?: string[];
+  /** Status the locked row reports inside the write transaction. */
+  lockedStatus?: string;
 }) {
   const upsert = jest.fn((args: unknown) => args);
   const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-  const prisma = {
+  const client = {
     store: {
       findUnique: jest
         .fn()
@@ -42,8 +44,12 @@ function setup(opts: {
         .fn()
         .mockResolvedValue((opts.known ?? []).map((sallaProductId) => ({ sallaProductId }))),
     },
-    $transaction: jest.fn(async (ops: unknown[]) => ops),
-  } as unknown as PrismaService;
+    $queryRaw: jest.fn().mockResolvedValue([{ status: opts.lockedStatus ?? 'ACTIVE' }]),
+  };
+  const transaction = jest.fn(async (arg: unknown) =>
+    typeof arg === 'function' ? arg(client) : arg,
+  );
+  const prisma = { ...client, $transaction: transaction } as unknown as PrismaService;
   const connections = {
     getValidAccessToken: jest.fn().mockResolvedValue('tok'),
   } as unknown as SallaConnectionsService;
@@ -105,6 +111,20 @@ describe('ProductSyncService.syncStore', () => {
     });
     expect((await service.syncStore('s1')).removed).toBe(0);
     expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('writes nothing when the store is uninstalled while the sync is running', async () => {
+    const { service, upsert, updateMany } = setup({
+      listing: { products: [sp('1')], complete: true, skipped: 0 },
+      known: ['1', '9'],
+      lockedStatus: 'UNINSTALLED',
+    });
+
+    const res = await service.syncStore('s1');
+
+    expect(upsert).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(res.removed).toBe(0);
   });
 
   it('keeps existing rows when Salla returns an empty catalogue', async () => {
