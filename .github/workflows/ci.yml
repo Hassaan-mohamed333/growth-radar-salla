@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build database package (generates Prisma client)
+        run: pnpm --filter @growth-radar/database build
+      - name: Backend typecheck and unit tests
+        run: |
+          pnpm --filter @growth-radar/backend typecheck
+          pnpm --filter @growth-radar/backend test
+      - name: Backend integration tests (embedded PostgreSQL, no secrets needed)
+        run: pnpm --filter @growth-radar/backend test:integration
+      - name: Frontend typecheck and build
+        run: |
+          pnpm --filter @growth-radar/frontend typecheck
+          pnpm --filter @growth-radar/frontend build
