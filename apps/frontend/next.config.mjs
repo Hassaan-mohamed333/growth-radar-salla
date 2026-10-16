@@ -6,7 +6,7 @@ const nextConfig = {
   // The session cookie then belongs to this domain, so it survives SameSite=Lax across the
   // default vercel.app / onrender.com hosts (which are separate sites on the public suffix list).
   async rewrites() {
-    const backend = (process.env.API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+    const backend = (process.env.API_URL ?? 'https://growth-radar-salla.onrender.com').replace(/\/$/, '');
     return [{ source: '/api/:path*', destination: `${backend}/api/:path*` }];
   },
   async headers() {
