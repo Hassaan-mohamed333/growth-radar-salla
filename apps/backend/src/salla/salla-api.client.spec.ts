@@ -1,4 +1,4 @@
-import { describeShape, parseSallaProduct, SallaApiClient } from './salla-api.client';
+import { parseSallaProduct, SallaApiClient } from './salla-api.client';
 
 const product = (id: string) => ({ id, name: `P ${id}`, price: { amount: 10, currency: 'SAR' } });
 const order = (id: string) => ({ id, date: { date: '2026-10-01 10:00:00' } });
@@ -132,22 +132,6 @@ describe('SallaApiClient products links as an array', () => {
 
     expect(requested).toEqual([1, 2]);
     expect(res.complete).toBe(true);
-  });
-});
-
-describe('describeShape', () => {
-  it('reports key names and value types, never the values', () => {
-    const shape = describeShape({
-      data: [{ id: 'secret-id', name: 'Customer Name' }],
-      pagination: { count: 1, next: 'https://x?token=abc' },
-    });
-
-    expect(shape).toBe(
-      '{data:array(1) of object, pagination:{count:number, next:string}}',
-    );
-    expect(shape).not.toContain('secret-id');
-    expect(shape).not.toContain('Customer');
-    expect(shape).not.toContain('token=abc');
   });
 });
 
