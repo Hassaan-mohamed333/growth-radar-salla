@@ -1,4 +1,4 @@
-import { parseSallaProduct, SallaApiClient } from './salla-api.client';
+import { describeShape, parseSallaProduct, SallaApiClient } from './salla-api.client';
 
 const product = (id: string) => ({ id, name: `P ${id}`, price: { amount: 10, currency: 'SAR' } });
 const order = (id: string) => ({ id, date: { date: '2026-10-01 10:00:00' } });
@@ -71,6 +71,43 @@ describe('SallaApiClient pagination', () => {
 
     expect(res.complete).toBe(false);
     expect(res.products).toHaveLength(1);
+  });
+});
+
+describe('SallaApiClient products pagination shape', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('pages a products listing that uses {count, current, next} instead of currentPage/totalPages', async () => {
+    const requested = mockPages((page) =>
+      page === 1
+        ? { data: [product('1')], pagination: { count: 2, current: 1, next: 'https://x/page=2' } }
+        : { data: [product('2')], pagination: { count: 2, current: 2, next: null } },
+    );
+
+    const res = await new SallaApiClient().listProducts('tok');
+
+    expect(requested).toEqual([1, 2]);
+    expect(res.products.map((p) => p.id)).toEqual(['1', '2']);
+    expect(res.complete).toBe(true);
+  });
+});
+
+describe('describeShape', () => {
+  it('reports key names and value types, never the values', () => {
+    const shape = describeShape({
+      data: [{ id: 'secret-id', name: 'Customer Name' }],
+      pagination: { count: 1, next: 'https://x?token=abc' },
+    });
+
+    expect(shape).toBe(
+      '{data:array(1) of object, pagination:{count:number, next:string}}',
+    );
+    expect(shape).not.toContain('secret-id');
+    expect(shape).not.toContain('Customer');
+    expect(shape).not.toContain('token=abc');
   });
 });
 

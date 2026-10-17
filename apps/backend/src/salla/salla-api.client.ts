@@ -29,6 +29,25 @@ const orderSchema = z.object({
     .nullish(),
 });
 
+/**
+ * Key names and value types of an unknown response body, with no values. Safe to log:
+ * it shows where Salla's shape differs without exposing customer data.
+ */
+export function describeShape(body: unknown, depth = 0): string {
+  if (body === null) return 'null';
+  if (Array.isArray(body)) {
+    return depth > 1 ? `array(${body.length})` : `array(${body.length}) of ${describeShape(body[0], depth + 1)}`;
+  }
+  if (typeof body === 'object') {
+    if (depth > 1) return 'object';
+    const entries = Object.entries(body as Record<string, unknown>).map(
+      ([k, v]) => `${k}:${describeShape(v, depth + 1)}`,
+    );
+    return `{${entries.join(', ')}}`;
+  }
+  return typeof body;
+}
+
 /** `.nullish()` goes outside the coerce: `z.coerce.number()` turns null into 0. */
 const pageCount = z.coerce.number().nullish();
 
@@ -235,7 +254,10 @@ export class SallaApiClient {
       });
 
       const parsed = ordersPage.safeParse(body);
-      if (!parsed.success) throw new SallaApiError(502, 'Unexpected orders response shape');
+      if (!parsed.success) {
+        this.logger.warn(`Unexpected orders response: ${describeShape(body)}`);
+        throw new SallaApiError(502, 'Unexpected orders response shape');
+      }
 
       let fresh = 0;
       for (const o of parsed.data.data) {
@@ -284,7 +306,11 @@ export class SallaApiClient {
       });
 
       const parsed = productsPage.safeParse(body);
-      if (!parsed.success) throw new SallaApiError(502, 'Unexpected products response shape');
+      if (!parsed.success) {
+        // TEMP diagnostics: key names and value types only, never values (they hold customer data).
+        this.logger.warn(`Unexpected products response: ${describeShape(body)}`);
+        throw new SallaApiError(502, 'Unexpected products response shape');
+      }
 
       let fresh = 0;
       for (const raw of parsed.data.data) {
