@@ -8,14 +8,18 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-arabic)', 'system-ui', 'sans-serif'],
+        // Cairo is self-hosted via @font-face in app/globals.css.
+        sans: ['Cairo', 'system-ui', 'sans-serif'],
       },
       colors: {
-        radar: {
-          50: '#effcf6',
-          500: '#12b76a',
-          600: '#0e9f5c',
-          900: '#0b3b27',
+        // Brand scale, darkest to lightest. Text on white needs `dark` or `darkest`;
+        // `main` and `light` are for borders, accents and fills, not text.
+        brand: {
+          darkest: '#03045e',
+          dark: '#0077b6',
+          main: '#00b4d8',
+          light: '#90e0ef',
+          lightest: '#caf0f8',
         },
       },
     },

@@ -128,7 +128,7 @@ export default async function DataConfidencePage({
                 aria-current={t.key === tab ? 'page' : undefined}
                 className={`rounded-full px-4 py-1.5 text-sm font-medium ${
                   t.key === tab
-                    ? 'bg-radar-50 text-radar-600'
+                    ? 'bg-brand-lightest text-brand-darkest'
                     : 'bg-white text-slate-600 hover:bg-slate-100'
                 }`}
               >
@@ -309,7 +309,7 @@ function AuditCard({ audit: a }: { audit: AuditItem }) {
       {a.recommendation && (
         <p className="mt-3 text-xs text-slate-500">
           غذّت التوصية:{' '}
-          <Link href="/recommendations" className="font-medium text-radar-600">
+          <Link href="/recommendations" className="font-medium text-brand-dark">
             {a.recommendation.title}
           </Link>
         </p>

@@ -129,7 +129,7 @@ export function AddCompetitorForm() {
             المنتج المقابل في متجرك (اختياري)
           </label>
           {product ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-radar-500 bg-radar-50 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-brand-main bg-brand-lightest px-3 py-2 text-sm">
               <span className="truncate">{product.name}</span>
               <button
                 type="button"
@@ -181,7 +181,7 @@ export function AddCompetitorForm() {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-lg bg-radar-600 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-lg bg-brand-dark hover:bg-brand-darkest px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
         >
           {busy ? 'جارٍ الإضافة…' : 'إضافة'}
         </button>

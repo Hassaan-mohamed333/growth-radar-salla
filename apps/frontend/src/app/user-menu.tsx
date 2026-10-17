@@ -59,7 +59,7 @@ export function UserMenu({ storeName }: { storeName: string }) {
       >
         <span
           aria-hidden
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-radar-50 text-xs text-radar-600"
+          className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-lightest text-xs text-brand-darkest"
         >
           {Array.from(storeName)[0] ?? '؟'}
         </span>

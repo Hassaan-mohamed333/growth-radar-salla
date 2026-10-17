@@ -42,7 +42,7 @@ export function DecisionButtons({ id }: { id: string }) {
           type="button"
           disabled={busy !== null}
           onClick={() => void decide('ACCEPTED')}
-          className="rounded-lg bg-radar-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-lg bg-brand-dark hover:bg-brand-darkest px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
         >
           {busy === 'ACCEPTED' ? 'جارٍ الحفظ…' : 'سأطبّقها'}
         </button>

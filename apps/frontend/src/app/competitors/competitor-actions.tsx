@@ -80,7 +80,7 @@ export function CompetitorActions({ id, isActive }: { id: string; isActive: bool
           <button
             type="submit"
             disabled={busy}
-            className="rounded-lg bg-radar-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
+            className="rounded-lg bg-brand-dark hover:bg-brand-darkest px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
           >
             حفظ
           </button>

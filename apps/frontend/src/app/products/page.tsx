@@ -145,7 +145,7 @@ function FilterBar({ filters }: { filters: Filters }) {
       </label>
       <button
         type="submit"
-        className="rounded-lg bg-radar-600 px-5 py-2 text-sm font-medium text-white"
+        className="rounded-lg bg-brand-dark hover:bg-brand-darkest px-5 py-2 text-sm font-medium text-white"
       >
         تطبيق
       </button>

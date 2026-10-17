@@ -41,7 +41,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar — sits at the inline-start edge (right in RTL) */}
       <aside className="hidden w-64 shrink-0 border-e border-slate-200 bg-white md:block">
-        <div className="px-6 py-5 text-xl font-bold text-radar-600">راصد</div>
+        <div className="px-6 py-5 text-xl font-bold text-brand-dark">راصد</div>
         <nav aria-label="القائمة الرئيسية" className="px-3">
           <ul className="space-y-1">
             {nav.map((item) => (
@@ -52,7 +52,7 @@ export function AppShell({
                     aria-current={item.key === active ? 'page' : undefined}
                     className={`block rounded-lg px-3 py-2 text-start text-sm font-medium ${
                       item.key === active
-                        ? 'bg-radar-50 text-radar-600'
+                        ? 'bg-brand-lightest text-brand-darkest'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
@@ -75,7 +75,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-          <h1 className="text-lg font-bold">{title}</h1>
+          <h1 className="text-lg font-bold text-brand-darkest">{title}</h1>
           <div className="flex items-center gap-3">
             <span
               className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${badge.pill}`}
@@ -97,11 +97,11 @@ export function SignIn() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 text-center">
-        <h1 className="text-xl font-bold text-radar-600">راصد</h1>
+        <h1 className="text-xl font-bold text-brand-dark">راصد</h1>
         <p className="mt-3 text-sm text-slate-600">سجّل الدخول عبر متجرك في سلة للوصول إلى لوحة التحكم.</p>
         <a
           href={SALLA_LOGIN_URL}
-          className="mt-6 inline-block rounded-lg bg-radar-600 px-5 py-2 text-sm font-medium text-white"
+          className="mt-6 inline-block rounded-lg bg-brand-dark hover:bg-brand-darkest px-5 py-2 text-sm font-medium text-white"
         >
           الدخول عبر سلة
         </a>

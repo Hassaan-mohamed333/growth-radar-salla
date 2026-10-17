@@ -106,7 +106,7 @@ export default async function RecommendationsPage({
             aria-current={t.key === tab ? 'page' : undefined}
             className={`rounded-full px-4 py-1.5 text-sm font-medium ${
               t.key === tab
-                ? 'bg-radar-50 text-radar-600'
+                ? 'bg-brand-lightest text-brand-darkest'
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -242,7 +242,7 @@ function Fact({ label, value, strong }: { label: string; value: string; strong?:
   return (
     <div className="min-w-0">
       <dt className="text-slate-500">{label}</dt>
-      <dd className={`mt-1 break-words tabular-nums ${strong ? 'font-bold text-radar-600' : 'font-medium'}`}>
+      <dd className={`mt-1 break-words tabular-nums ${strong ? 'font-bold text-brand-dark' : 'font-medium'}`}>
         {value}
       </dd>
     </div>

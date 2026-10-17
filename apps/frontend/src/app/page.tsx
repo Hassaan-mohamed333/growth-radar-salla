@@ -210,7 +210,7 @@ function SummarySections({ summary }: { summary: AnalyticsSummary }) {
           <h2 id="rec-heading" className="text-base font-bold">
             أحدث التوصيات
           </h2>
-          <Link href="/recommendations" className="text-sm font-medium text-radar-600">
+          <Link href="/recommendations" className="text-sm font-medium text-brand-dark">
             عرض الكل
           </Link>
         </div>
