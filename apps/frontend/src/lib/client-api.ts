@@ -1,11 +1,6 @@
-// Browser-side calls to the NestJS backend (mutations from client components).
-// The session cookie is sent with `credentials: 'include'`; CORS only allows FRONTEND_ORIGIN.
-
-// Inlined at build time; must be the browser-reachable backend origin.
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(
-  /\/$/,
-  '',
-);
+// Browser-side calls to the backend. Same-origin on purpose: next.config rewrites /api to the
+// backend, so the session cookie stays first-party. Do not read NEXT_PUBLIC_API_URL here.
+export const API_URL = '';
 
 export type Outcome<T> = { ok: true; data: T } | { ok: false; status: number };
 

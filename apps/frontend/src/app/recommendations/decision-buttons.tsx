@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // Inlined at build time; must be the browser-reachable backend origin.
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+const API_URL = ''; // same-origin: next.config rewrites /api to the backend
 
 /**
  * Accept / dismiss a pending recommendation. Accepting only records the merchant's

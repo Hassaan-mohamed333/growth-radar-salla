@@ -258,11 +258,8 @@ const BASE_URL = (
   'http://localhost:4000'
 ).replace(/\/$/, '');
 
-/** Browser-facing URL that starts the Salla OAuth flow (the browser, not Next, must visit it). */
-export const SALLA_LOGIN_URL = `${(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').replace(
-  /\/$/,
-  '',
-)}/api/v1/auth/salla/login`;
+/** Browser-facing URL that starts the Salla OAuth flow. Same-origin: next.config rewrites /api to the backend. */
+export const SALLA_LOGIN_URL = '/api/v1/auth/salla/login';
 
 const SESSION_COOKIE = 'gr_session';
 
