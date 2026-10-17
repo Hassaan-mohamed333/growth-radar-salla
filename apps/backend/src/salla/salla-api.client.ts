@@ -71,15 +71,26 @@ const pagination = z
     currentPage: pageCount,
     totalPages: pageCount,
     next: z.string().nullish(),
-    links: z.object({ next: z.string().nullish() }).nullish(),
+    // Salla sends `links: []` when there are no links, so accept an array as well as an object.
+    links: z.union([z.object({ next: z.string().nullish() }), z.array(z.unknown())]).nullish(),
   })
   .nullish();
 
 type Pagination = z.infer<typeof pagination>;
 
+/** The `links` object, or undefined when Salla sent an array (no usable link data). */
+function linksObject(p: Pagination): { next?: string | null } | undefined {
+  const links = p?.links;
+  return links && !Array.isArray(links) ? links : undefined;
+}
+
 /** Whether the response carries any field that says where paging ends. */
 function hasPagingMetadata(p: Pagination): boolean {
-  return (p?.totalPages != null && Number.isFinite(p.totalPages)) || p?.links != null || p?.next != null;
+  return (
+    (p?.totalPages != null && Number.isFinite(p.totalPages)) ||
+    linksObject(p) !== undefined ||
+    p?.next != null
+  );
 }
 
 /**
@@ -91,7 +102,8 @@ function hasPagingMetadata(p: Pagination): boolean {
 function hasMorePages(page: number, itemCount: number, p: Pagination): boolean {
   if (itemCount === 0) return false;
   if (p?.totalPages != null && Number.isFinite(p.totalPages)) return page < p.totalPages;
-  if (p?.links) return Boolean(p.links.next);
+  const links = linksObject(p);
+  if (links) return Boolean(links.next);
   if (p?.next !== undefined) return Boolean(p.next);
   return true;
 }

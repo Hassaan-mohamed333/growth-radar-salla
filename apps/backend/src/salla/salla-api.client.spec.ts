@@ -95,6 +95,46 @@ describe('SallaApiClient products pagination shape', () => {
   });
 });
 
+describe('SallaApiClient products links as an array', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('accepts links: [] from Salla and pages by totalPages', async () => {
+    const requested = mockPages((page) =>
+      page === 1
+        ? {
+            data: [product('1')],
+            pagination: { currentPage: 1, totalPages: 2, total: 2, links: [] },
+          }
+        : {
+            data: [product('2')],
+            pagination: { currentPage: 2, totalPages: 2, total: 2, links: [] },
+          },
+    );
+
+    const res = await new SallaApiClient().listProducts('tok');
+
+    expect(requested).toEqual([1, 2]);
+    expect(res.products.map((p) => p.id)).toEqual(['1', '2']);
+    expect(res.complete).toBe(true);
+  });
+
+  it('does not treat links: [] as paging metadata when totalPages is absent', async () => {
+    const requested = mockPages((page) =>
+      page === 1
+        ? { data: [product('1')], pagination: { links: [] } }
+        : { data: [], pagination: { links: [] } },
+    );
+
+    const res = await new SallaApiClient().listProducts('tok');
+
+    expect(requested).toEqual([1, 2]);
+    expect(res.complete).toBe(true);
+  });
+});
+
 describe('describeShape', () => {
   it('reports key names and value types, never the values', () => {
     const shape = describeShape({
