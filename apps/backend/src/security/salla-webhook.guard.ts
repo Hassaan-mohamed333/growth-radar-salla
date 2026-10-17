@@ -26,6 +26,73 @@ export type SallaWebhookRequest = Request & {
 const HEX_SHA256 = /^[0-9a-f]{64}$/i;
 
 /**
+ * Identity of one Salla event. Salla resends an event with a re-serialised body,
+ * so hashing the raw bytes lets a resend through as a new event. The event's own
+ * fields identify it instead. `created_at` has one-second precision, so the data
+ * hash keeps two changes to one product in the same second apart; a resend carries
+ * identical data and still matches. Bodies that don't fit this shape fall back to
+ * a hash of the raw bytes.
+ */
+export function webhookIdempotencyKey(rawBody: Buffer): string {
+  const rawKey = `salla:webhook:v2:raw:${sha256(rawBody)}`;
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return rawKey;
+  }
+  if (!isRecord(payload) || !isRecord(payload.data)) return rawKey;
+
+  const { event, merchant, created_at: createdAt, data } = payload;
+  const dataId = data.id;
+  if (
+    typeof event !== 'string' ||
+    typeof createdAt !== 'string' ||
+    !isScalarId(merchant) ||
+    !isScalarId(dataId)
+  ) {
+    return rawKey;
+  }
+
+  const identity = JSON.stringify([
+    event,
+    String(merchant),
+    String(dataId),
+    createdAt,
+    sha256(stableStringify(data)),
+  ]);
+  return `salla:webhook:v2:${sha256(identity)}`;
+}
+
+function sha256(input: string | Buffer): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isScalarId(value: unknown): value is string | number {
+  return (
+    (typeof value === 'number' && Number.isFinite(value)) ||
+    (typeof value === 'string' && value !== '')
+  );
+}
+
+/** JSON with object keys sorted, so the same content always produces the same string. */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (isRecord(value)) {
+    const entries = Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
  * Verifies Salla webhooks, then claims an idempotency slot in Redis.
  *
  * - "signature" strategy: hex HMAC-SHA256 of the *raw* request body using the
@@ -66,7 +133,7 @@ export class SallaWebhookGuard implements CanActivate {
     }
 
     // Authenticity first, so unauthenticated callers can never write to Redis.
-    const idempotencyKey = `salla:webhook:v1:${createHash('sha256').update(rawBody).digest('hex')}`;
+    const idempotencyKey = webhookIdempotencyKey(rawBody);
     const first = await this.idempotency.begin(idempotencyKey);
     req.sallaWebhook = { idempotencyKey, duplicate: !first };
 
