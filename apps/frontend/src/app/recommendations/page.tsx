@@ -75,9 +75,10 @@ export default async function RecommendationsPage({
 }) {
   const { tab, page } = parse(await searchParams);
   const flags = { unauthorized: false };
-  const [status, list] = await Promise.all([
+  const [status, list, blockers] = await Promise.all([
     settle(api.storeStatus(), flags),
     settle(api.recommendations({ status: tab, page, pageSize: PAGE_SIZE }), flags),
+    settle(api.recommendationBlockers(), flags),
   ]);
 
   if (flags.unauthorized) return <SignIn />;
@@ -97,6 +98,46 @@ export default async function RecommendationsPage({
         تُبنى التوصيات من أسعار منافسيك الحديثة، ولا يُقترح سعر إلا إذا كانت تكلفة المنتج معروفة
         ويحفظ هامشك. لا يُغيَّر أي سعر في سلة تلقائيًا.
       </p>
+
+      <div className="flex justify-end">
+        <a
+          href={`/api/v1/recommendations/export.csv?status=${tab}`}
+          download
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          تصدير CSV
+        </a>
+      </div>
+
+      {blockers && (blockers.productsWithoutCost > 0 || blockers.failingCompetitorsCount > 0) && (
+        <section
+          aria-labelledby="blockers-heading"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+        >
+          <h2 id="blockers-heading" className="font-bold">
+            مشكلات تمنع توصيات دقيقة
+          </h2>
+          <ul className="mt-2 list-disc space-y-1 ps-5">
+            {blockers.productsWithoutCost > 0 && (
+              <li>
+                {nf.format(blockers.productsWithoutCost)} منتجًا بدون تكلفة، ولا يُقترح لها سعر لأن
+                الهامش الآمن لا يُحسب بدون تكلفة.
+              </li>
+            )}
+            {blockers.failingCompetitorsCount > 0 && (
+              <li>
+                {nf.format(blockers.failingCompetitorsCount)} منافسًا فشل آخر فحص لهم
+                {blockers.failingCompetitors.length > 0 &&
+                  `: ${blockers.failingCompetitors.map((c) => c.name).join('، ')}`}
+                .{' '}
+                <Link href="/competitors" className="font-medium underline">
+                  مراجعة المنافسين
+                </Link>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
 
       <nav aria-label="حالة التوصيات" className="flex gap-2">
         {tabs.map((t) => (

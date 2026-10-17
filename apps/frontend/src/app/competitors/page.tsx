@@ -13,6 +13,7 @@ import { formatDate, money, nf } from '../../lib/format';
 import { AppShell, SignIn } from '../app-shell';
 import { AddCompetitorForm } from './add-competitor-form';
 import { CompetitorActions } from './competitor-actions';
+import { CompetitorMenu } from './competitor-menu';
 
 export const dynamic = 'force-dynamic';
 
@@ -227,7 +228,10 @@ function CompetitorRow({ c }: { c: CompetitorItem }) {
         <StatusCell c={c} />
       </td>
       <td className="px-4 py-3">
-        <CompetitorActions id={c.id} isActive={c.isActive} />
+        <div className="flex items-start justify-between gap-2">
+          <CompetitorActions id={c.id} isActive={c.isActive} />
+          <CompetitorMenu competitor={c} />
+        </div>
       </td>
     </tr>
   );

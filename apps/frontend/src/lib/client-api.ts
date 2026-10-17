@@ -5,18 +5,20 @@ export const API_URL = '';
 export type Outcome<T> = { ok: true; data: T } | { ok: false; status: number };
 
 export async function send<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
-  body: unknown,
+  body?: unknown,
 ): Promise<Outcome<T>> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
       method,
       credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!res.ok) return { ok: false, status: res.status };
+    // 204 No Content (DELETE) has no body to parse.
+    if (res.status === 204) return { ok: true, data: undefined as T };
     return { ok: true, data: (await res.json()) as T };
   } catch {
     return { ok: false, status: 0 };

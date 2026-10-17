@@ -235,6 +235,12 @@ export interface RecommendationList {
   total: number;
 }
 
+export interface RecommendationBlockers {
+  productsWithoutCost: number;
+  failingCompetitorsCount: number;
+  failingCompetitors: Array<{ id: string; name: string; scrapeFailures: number }>;
+}
+
 export interface RecommendationQuery {
   status?: 'PENDING' | 'ACCEPTED' | 'DISMISSED' | 'ALL';
   page?: number;
@@ -315,6 +321,7 @@ export const api = {
     const qs = params.toString();
     return get<RecommendationList>(`/api/v1/recommendations${qs ? `?${qs}` : ''}`);
   },
+  recommendationBlockers: () => get<RecommendationBlockers>('/api/v1/recommendations/blockers'),
   products: (q: ProductQuery = {}) => {
     const params = new URLSearchParams();
     if (q.page) params.set('page', String(q.page));

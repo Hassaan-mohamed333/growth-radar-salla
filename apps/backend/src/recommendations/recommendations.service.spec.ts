@@ -58,6 +58,61 @@ describe('RecommendationsService.list', () => {
   });
 });
 
+describe('RecommendationsService.exportRows', () => {
+  it('scopes the export to the store, filters by status and caps the rows', async () => {
+    const { service, findMany } = setup();
+
+    await service.exportRows('s1', 'PENDING');
+
+    expect(findMany.mock.calls[0]![0]).toMatchObject({
+      where: { storeId: 's1', status: 'PENDING' },
+      take: 1000,
+    });
+  });
+
+  it('exports every status for ALL', async () => {
+    const { service, findMany } = setup();
+
+    await service.exportRows('s1', 'ALL');
+
+    expect(findMany.mock.calls[0]![0].where).toEqual({ storeId: 's1' });
+  });
+});
+
+describe('RecommendationsService.blockers', () => {
+  it('counts store products without cost and lists the failing active competitors', async () => {
+    const productCount = jest.fn().mockResolvedValue(12);
+    const competitorCount = jest.fn().mockResolvedValue(2);
+    const competitorFind = jest
+      .fn()
+      .mockResolvedValue([{ id: 'c1', name: 'Rival', scrapeFailures: 4 }]);
+    const prisma = {
+      product: { count: productCount },
+      competitor: { count: competitorCount, findMany: competitorFind },
+    } as unknown as PrismaService;
+    const service = new RecommendationsService(prisma);
+
+    const out = await service.blockers('s1');
+
+    expect(productCount).toHaveBeenCalledWith({
+      where: {
+        storeId: 's1',
+        status: 'SALE',
+        competitors: { some: { isActive: true, lastPrice: { not: null } } },
+        OR: [{ costPrice: null }, { costPrice: { lte: 0 } }],
+      },
+    });
+    const failing = { storeId: 's1', isActive: true, lastScrapeError: { not: null } };
+    expect(competitorCount).toHaveBeenCalledWith({ where: failing });
+    expect(competitorFind.mock.calls[0]![0]).toMatchObject({ where: failing, take: 5 });
+    expect(out).toEqual({
+      productsWithoutCost: 12,
+      failingCompetitorsCount: 2,
+      failingCompetitors: [{ id: 'c1', name: 'Rival', scrapeFailures: 4 }],
+    });
+  });
+});
+
 describe('RecommendationsService.decide', () => {
   it('moves PENDING to the chosen status atomically, scoped by store', async () => {
     const { service, updateMany } = setup();

@@ -28,12 +28,23 @@ export interface RecommendationDto {
   decidedAt: string | null;
 }
 
+export interface RecommendationBlockersDto {
+  /** Active products in SALE status with no cost price, so no safe floor can be computed. */
+  productsWithoutCost: number;
+  /** Active competitors whose last scrape failed. */
+  failingCompetitorsCount: number;
+  /** Up to five of them, most failures first. */
+  failingCompetitors: Array<{ id: string; name: string; scrapeFailures: number }>;
+}
+
 export interface RecommendationListResponse {
   items: RecommendationDto[];
   page: number;
   pageSize: number;
   total: number;
 }
+
+const EXPORT_LIMIT = 1000;
 
 const select = {
   id: true,
@@ -72,6 +83,48 @@ export class RecommendationsService {
     ]);
 
     return { total, page: q.page, pageSize: q.pageSize, items: rows.map(toDto) };
+  }
+
+  /** Newest first, capped so one export stays bounded. Scoped by the session's store. */
+  async exportRows(storeId: string, status: RecommendationFilter): Promise<RecommendationDto[]> {
+    const where: Prisma.DecisionRecommendationWhereInput = { storeId };
+    if (status !== 'ALL') where.status = status;
+
+    const rows = await this.prisma.decisionRecommendation.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: EXPORT_LIMIT,
+      select,
+    });
+    return rows.map(toDto);
+  }
+
+  /**
+   * What stops the engine from suggesting safe prices: products the engine evaluates
+   * (SALE, with an active competitor price) but have no cost, so no margin floor, and
+   * active competitors whose last scrape failed. Scoped by store.
+   */
+  async blockers(storeId: string): Promise<RecommendationBlockersDto> {
+    const failing = { storeId, isActive: true, lastScrapeError: { not: null } };
+    const priced = { some: { isActive: true, lastPrice: { not: null } } };
+    const [productsWithoutCost, failingCompetitorsCount, failingCompetitors] = await Promise.all([
+      this.prisma.product.count({
+        where: {
+          storeId,
+          status: 'SALE',
+          competitors: priced,
+          OR: [{ costPrice: null }, { costPrice: { lte: 0 } }],
+        },
+      }),
+      this.prisma.competitor.count({ where: failing }),
+      this.prisma.competitor.findMany({
+        where: failing,
+        orderBy: [{ scrapeFailures: 'desc' }, { id: 'asc' }],
+        take: 5,
+        select: { id: true, name: true, scrapeFailures: true },
+      }),
+    ]);
+    return { productsWithoutCost, failingCompetitorsCount, failingCompetitors };
   }
 
   /**

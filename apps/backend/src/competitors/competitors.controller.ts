@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -119,6 +120,12 @@ export class CompetitorsController {
     @Body() body: unknown,
   ): Promise<CompetitorDto> {
     return this.competitors.update(s.storeId, parseId(competitorId), parse(updateSchema, body));
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  async remove(@CurrentSession() s: SessionContext, @Param('id') competitorId: string): Promise<void> {
+    await this.competitors.remove(s.storeId, parseId(competitorId));
   }
 
   /** Manually record an observed competitor price (the scraper uses the service directly). */

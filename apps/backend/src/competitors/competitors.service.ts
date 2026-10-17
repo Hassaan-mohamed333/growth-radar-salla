@@ -201,6 +201,16 @@ export class CompetitorsService {
     }
   }
 
+  /**
+   * Hard delete. Price history goes with the row (FK cascade), and the product link
+   * is a column on the same row, so nothing else needs clearing. Scoped by store, so
+   * another store's id is a 404 rather than a 403.
+   */
+  async remove(storeId: string, id: string): Promise<void> {
+    const { count } = await this.prisma.competitor.deleteMany({ where: { id, storeId } });
+    if (count === 0) throw new NotFoundException('Competitor not found');
+  }
+
   private async insert(data: {
     tenantId: string;
     storeId: string;

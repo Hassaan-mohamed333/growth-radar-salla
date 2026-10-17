@@ -198,6 +198,23 @@ describe('CompetitorsService.update - product link', () => {
   });
 });
 
+describe('CompetitorsService.remove', () => {
+  it('deletes only a competitor of the session store', async () => {
+    const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+    const service = new CompetitorsService({ competitor: { deleteMany } } as unknown as PrismaService);
+
+    await expect(service.remove('store-1', 'c1')).resolves.toBeUndefined();
+    expect(deleteMany).toHaveBeenCalledWith({ where: { id: 'c1', storeId: 'store-1' } });
+  });
+
+  it('404s when no competitor matches in this store', async () => {
+    const deleteMany = jest.fn().mockResolvedValue({ count: 0 });
+    const service = new CompetitorsService({ competitor: { deleteMany } } as unknown as PrismaService);
+
+    await expect(service.remove('store-2', 'c1')).rejects.toThrow(NotFoundException);
+  });
+});
+
 describe('CompetitorsService.list', () => {
   function listSetup(rows: unknown[] = []) {
     const findMany = jest.fn().mockResolvedValue(rows);

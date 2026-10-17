@@ -3,7 +3,14 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { SALLA_LOGIN_URL, type ConnectionState, type StoreStatus } from '../lib/api';
+import {
+  api,
+  settle,
+  SALLA_LOGIN_URL,
+  type ConnectionState,
+  type StoreStatus,
+} from '../lib/api';
+import { nf } from '../lib/format';
 import { UserMenu } from './user-menu';
 
 export type NavKey = 'overview' | 'products' | 'competitors' | 'recommendations' | 'confidence';
@@ -24,7 +31,7 @@ const connectionBadge: Record<ConnectionState, { label: string; dot: string; pil
   disconnected: { label: 'غير متصل', dot: 'bg-red-500', pill: 'bg-red-50 text-red-700' },
 };
 
-export function AppShell({
+export async function AppShell({
   active,
   title,
   status,
@@ -36,6 +43,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const badge = connectionBadge[status?.status ?? 'disconnected'];
+  // One-row request: only the total is needed. A failure just hides the count.
+  const pending = await settle(api.recommendations({ status: 'PENDING', pageSize: 1 }), {
+    unauthorized: false,
+  });
+  const pendingCount = pending?.total ?? 0;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -50,13 +62,18 @@ export function AppShell({
                   <Link
                     href={item.href}
                     aria-current={item.key === active ? 'page' : undefined}
-                    className={`block rounded-lg px-3 py-2 text-start text-sm font-medium ${
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 text-start text-sm font-medium ${
                       item.key === active
                         ? 'bg-brand-lightest text-brand-darkest'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     {item.label}
+                    {item.key === 'recommendations' && pendingCount > 0 && (
+                      <span className="rounded-full bg-brand-dark px-2 py-0.5 text-xs font-bold tabular-nums text-white">
+                        {nf.format(pendingCount)}
+                      </span>
+                    )}
                   </Link>
                 ) : (
                   <span
