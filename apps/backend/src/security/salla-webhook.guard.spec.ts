@@ -152,7 +152,7 @@ describe('webhookIdempotencyKey', () => {
     expect(webhookIdempotencyKey(change(2000))).not.toBe(webhookIdempotencyKey(change(1800)));
   });
 
-  it('keeps a product reverted to an earlier price distinct when its timestamp moves on', () => {
+  it('treats the same price at a later second as a different event', () => {
     const at = (second: string, amount: number) =>
       productEvent({
         created_at: `Sat Oct 17 2026 05:45:${second} GMT+0300`,
