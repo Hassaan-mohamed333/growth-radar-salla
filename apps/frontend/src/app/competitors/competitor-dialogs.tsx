@@ -64,7 +64,7 @@ export function EditCompetitorDialog({
       productUrl: url.trim() || null,
     });
     setBusy(false);
-    if (!res.ok) return setError(failureMessage(res.status));
+    if (!res.ok) return setError(failureMessage(res.status, res.message));
     onClose();
     router.refresh();
   }

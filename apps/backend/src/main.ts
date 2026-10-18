@@ -11,6 +11,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
+  // Render terminates TLS in front of the app: trust exactly one proxy hop so the
+  // client IP (used by the rate limiter) comes from X-Forwarded-For, not the proxy.
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(helmet());
   app.enableCors({

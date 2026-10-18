@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@growth-radar/database';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScrapeError } from '../scraper/scrape-error';
-import { domainOf, parseCompetitorUrl } from '../scraper/url-guard';
+import { domainOf, parseCompetitorUrl, URL_REJECTION_TEXT } from '../scraper/url-guard';
 
 export interface CompetitorDto {
   id: string;
@@ -247,17 +247,17 @@ function resolveListing(
       const url = parseCompetitorUrl(productUrl);
       const derived = domainOf(url);
       if (domain && domainOf(parseCompetitorUrl(`https://${domain}`)) !== derived) {
-        throw new BadRequestException('domain does not match productUrl');
+        throw new BadRequestException('النطاق المدخل لا يطابق رابط الصفحة.');
       }
       return { domain: derived, productUrl: url.toString() };
     }
-    if (!domain) throw new BadRequestException('Either productUrl or domain is required');
+    if (!domain) throw new BadRequestException('أدخل رابط الصفحة أو النطاق.');
     return { domain: domainOf(parseCompetitorUrl(`https://${domain}`)), productUrl: null };
   } catch (err) {
     if (err instanceof ScrapeError) {
-      // Fixed text: never echo the offending URL back or hint at internal topology.
+      // Fixed text per reason: the offending URL is never echoed back.
       throw new BadRequestException(
-        err.kind === 'forbidden_target' ? 'URL target is not allowed' : 'Invalid URL',
+        err.reason ? URL_REJECTION_TEXT[err.reason] : 'الرابط غير صالح.',
       );
     }
     throw err;

@@ -71,7 +71,7 @@ export function AddCompetitorForm() {
 
     setBusy(false);
     if (!res.ok) {
-      setError(failureMessage(res.status));
+      setError(failureMessage(res.status, res.message));
       return;
     }
     setUrl('');

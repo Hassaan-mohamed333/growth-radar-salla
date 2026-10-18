@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env';
 import { AuthModule } from './auth/auth.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -23,6 +25,9 @@ import { WebhooksModule } from './webhooks/webhooks.module';
       validate: validateEnv,
       envFilePath: ['.env', '../../.env'],
     }),
+    // Per-client-IP budget for every route. Webhooks opt out (see WebhooksController):
+    // Salla retries on error, and a 429 there would drop real events.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
     RedisModule,
     SecurityModule,
@@ -37,5 +42,6 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     ScraperModule,
     RecommendationsModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

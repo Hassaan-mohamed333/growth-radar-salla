@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { URL_REJECTION_TEXT } from '../scraper/url-guard';
 import { Prisma } from '@growth-radar/database';
 import type { PrismaService } from '../prisma/prisma.service';
 import { CompetitorsService } from './competitors.service';
@@ -76,6 +77,23 @@ describe('CompetitorsService.create', () => {
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BadRequestException);
     expect(JSON.stringify((err as BadRequestException).getResponse())).not.toContain('169.254');
+  });
+
+  it('tells the merchant why a URL was refused, in fixed text', async () => {
+    const { service } = setup();
+    const err = await service
+      .create(ctx, { name: 'x', productUrl: 'https://rival.example.com:8443/p/1' })
+      .catch((e: unknown) => e);
+    expect((err as BadRequestException).message).toBe(URL_REJECTION_TEXT.unsupported_port);
+  });
+
+  it('gives the merchant the local-address reason without echoing the URL', async () => {
+    const { service } = setup();
+    const err = await service
+      .create(ctx, { name: 'x', productUrl: 'http://localhost/secret-path' })
+      .catch((e: unknown) => e);
+    expect((err as BadRequestException).message).toBe(URL_REJECTION_TEXT.internal_host);
+    expect((err as BadRequestException).message).not.toContain('secret-path');
   });
 
   it('rejects a domain that disagrees with the URL', async () => {

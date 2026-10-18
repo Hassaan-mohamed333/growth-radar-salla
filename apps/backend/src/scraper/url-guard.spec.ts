@@ -1,11 +1,20 @@
 import { ScrapeError } from './scrape-error';
-import { domainOf, isPublicAddress, parseCompetitorUrl } from './url-guard';
+import { domainOf, isPublicAddress, parseCompetitorUrl, URL_REJECTION_TEXT } from './url-guard';
 
 const kindOf = (fn: () => unknown) => {
   try {
     fn();
   } catch (err) {
     return err instanceof ScrapeError ? err.kind : 'other';
+  }
+  return 'none';
+};
+
+const reasonOf = (fn: () => unknown) => {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof ScrapeError ? err.reason : 'other';
   }
   return 'none';
 };
@@ -53,6 +62,27 @@ describe('parseCompetitorUrl', () => {
   it('accepts the standard ports, written out or implied', () => {
     expect(parseCompetitorUrl('https://example.com:443/x').port).toBe('');
     expect(parseCompetitorUrl('http://example.com:80/x').port).toBe('');
+  });
+
+  it.each([
+    ['ftp://example.com/x', 'unsupported_scheme'],
+    ['not a url', 'malformed'],
+    ['https://user:pw@example.com/', 'has_credentials'],
+    ['https://intranet/', 'single_label_host'],
+    ['https://example.com:8443/x', 'unsupported_port'],
+    ['http://localhost/x', 'internal_host'],
+    ['http://printer.local/x', 'internal_host'],
+    ['http://127.0.0.1/x', 'private_address'],
+    ['http://[fd00::1]/x', 'private_address'],
+  ])('gives %s the reason %s', (u, reason) => {
+    expect(reasonOf(() => parseCompetitorUrl(u))).toBe(reason);
+  });
+
+  it('has merchant text for every reason, with no IP literal or internal host', () => {
+    for (const text of Object.values(URL_REJECTION_TEXT)) {
+      expect(text).not.toMatch(/\d+\.\d+\.\d+\.\d+|localhost:/);
+      expect(text.length).toBeGreaterThan(0);
+    }
   });
 
   it('rejects over-long URLs', () => {

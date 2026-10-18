@@ -1,5 +1,20 @@
 import { isIP } from 'node:net';
-import { ScrapeError } from './scrape-error';
+import { ScrapeError, type UrlRejectionReason } from './scrape-error';
+
+/**
+ * Merchant-facing text for each rejection reason. Fixed strings only: they never
+ * contain the submitted URL or any hint about our internal network.
+ */
+export const URL_REJECTION_TEXT: Record<UrlRejectionReason, string> = {
+  too_long: 'الرابط طويل جدًا. الحد الأقصى 2048 حرفًا.',
+  malformed: 'الرابط غير صالح. تأكد من كتابته كاملًا، مثل https://example.com/product',
+  unsupported_scheme: 'الرابط يجب أن يبدأ بـ http:// أو https://.',
+  has_credentials: 'الرابط يحتوي على اسم مستخدم أو كلمة مرور، وهذا غير مسموح.',
+  internal_host: 'الرابط يشير لعنوان محلي أو داخلي، ولا يمكن فحصه.',
+  private_address: 'الرابط يشير لعنوان IP خاص، ولا يمكن فحصه.',
+  single_label_host: 'اسم النطاق غير صالح. استخدم نطاقًا عامًا مثل example.com.',
+  unsupported_port: 'الرابط يحتوي على منفذ غير مدعوم. استخدم الرابط بدون رقم منفذ.',
+};
 
 /**
  * Competitor URLs are typed by merchants and fetched by our server, so they must
@@ -17,34 +32,44 @@ export interface CompetitorUrlOptions {
 
 /** Parses and validates a competitor URL. Throws ScrapeError('invalid_url' | 'forbidden_target'). */
 export function parseCompetitorUrl(raw: string, opts: CompetitorUrlOptions = {}): URL {
-  if (raw.length > MAX_URL_LENGTH) throw new ScrapeError('invalid_url', 'URL too long');
+  if (raw.length > MAX_URL_LENGTH) {
+    throw new ScrapeError('invalid_url', 'URL too long', { reason: 'too_long' });
+  }
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    throw new ScrapeError('invalid_url', 'Not a valid URL');
+    throw new ScrapeError('invalid_url', 'Not a valid URL', { reason: 'malformed' });
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new ScrapeError('invalid_url', 'Only http(s) URLs are allowed');
+    throw new ScrapeError('invalid_url', 'Only http(s) URLs are allowed', {
+      reason: 'unsupported_scheme',
+    });
   }
   if (url.username || url.password) {
-    throw new ScrapeError('invalid_url', 'URLs with credentials are not allowed');
+    throw new ScrapeError('invalid_url', 'URLs with credentials are not allowed', {
+      reason: 'has_credentials',
+    });
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
-    throw new ScrapeError('forbidden_target', 'Internal hostname');
+    throw new ScrapeError('forbidden_target', 'Internal hostname', { reason: 'internal_host' });
   }
   if (isIP(host) && !isPublicAddress(host)) {
-    throw new ScrapeError('forbidden_target', 'Private address');
+    throw new ScrapeError('forbidden_target', 'Private address', { reason: 'private_address' });
   }
   // A bare single-label host ("intranet") can only resolve internally.
   if (!isIP(host) && !host.includes('.')) {
-    throw new ScrapeError('invalid_url', 'Hostname must be a public domain');
+    throw new ScrapeError('invalid_url', 'Hostname must be a public domain', {
+      reason: 'single_label_host',
+    });
   }
   // Checked after the host rules so internal targets still report as forbidden_target.
   // `port` is empty when it is the scheme default, so only 80 and 443 pass.
   if (url.port && !opts.allowNonStandardPorts) {
-    throw new ScrapeError('invalid_url', 'Only standard web ports are allowed');
+    throw new ScrapeError('invalid_url', 'Only standard web ports are allowed', {
+      reason: 'unsupported_port',
+    });
   }
   return url;
 }

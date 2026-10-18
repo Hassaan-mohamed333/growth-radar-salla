@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Logger, Post } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ProductWebhookHandler } from '../products/product-webhook.handler';
 import { AppLifecycleHandler } from './app-lifecycle.handler';
 import { OrderWebhookHandler } from '../sync/order-webhook.handler';
@@ -11,6 +12,8 @@ interface SallaWebhookPayload {
   data?: unknown;
 }
 
+// Authenticated by HMAC and deduplicated per event, so the per-IP budget does not apply.
+@SkipThrottle()
 @Controller('webhooks')
 export class WebhooksController {
   private readonly logger = new Logger(WebhooksController.name);
