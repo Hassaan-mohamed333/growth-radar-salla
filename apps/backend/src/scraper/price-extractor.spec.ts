@@ -79,3 +79,40 @@ describe('parsePrice', () => {
     expect(parsePrice(input)).toBeNull();
   });
 });
+
+describe('extractPrice on hostile markup', () => {
+  // Competitor pages are attacker-controlled, and the fetcher accepts up to 2 MB.
+  // The old patterns were quadratic: 100 KB already took seconds, 2 MB took hours and
+  // blocked the API process. 100 KB keeps a revert failing in seconds, not hanging.
+  const SIZE = 100 * 1024;
+
+  it.each([
+    ['unclosed JSON-LD tags', '<script type="application/ld+json">x'.repeat(SIZE / 38)],
+    ['bare "<" characters', '<'.repeat(SIZE)],
+    ['meta tags without ">"', '<meta'.repeat(SIZE / 5)],
+    ['itemprop without ">"', '<span itemprop="price"'.repeat(SIZE / 23)],
+  ])('answers quickly for %s', (_name, html) => {
+    const started = Date.now();
+    extractPrice(html);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('keeps long separator runs linear in parsePrice', () => {
+    const started = Date.now();
+    expect(parsePrice(','.repeat(100_000) + '1')).toBe(1);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe('extractPrice tag handling', () => {
+  it('finds JSON-LD after an unrelated unclosed script tag', () => {
+    const ld = JSON.stringify({ '@type': 'Product', offers: { price: '75', priceCurrency: 'SAR' } });
+    const html = `<html><script>var a = 1;<script type="application/ld+json">${ld}</SCRIPT></html>`;
+    expect(extractPrice(html)).toEqual({ price: 75, currency: 'SAR', inStock: null });
+  });
+
+  it('reads itemprop=price from a tag that is not the first one on the page', () => {
+    const html = '<div class="a"></div><span itemprop="price" content="310.5"></span>';
+    expect(extractPrice(html)).toEqual({ price: 310.5, currency: null, inStock: null });
+  });
+});

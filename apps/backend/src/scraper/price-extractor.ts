@@ -21,11 +21,20 @@ export function extractPrice(html: string): ExtractedPrice | null {
 // ───────────────────────── JSON-LD ─────────────────────────
 
 function fromJsonLd(html: string): ExtractedPrice | null {
-  const re = /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
-  for (let m = re.exec(html); m; m = re.exec(html)) {
+  // Forward-only scans with bounded tags. A lazy `[\s\S]*?</script>` restarts at every
+  // unclosed opening tag, which goes quadratic on hostile pages and blocks the event loop.
+  const open = /<script\b[^<>]{0,1000}>/gi;
+  const close = /<\/script\s*>/gi;
+  for (let m = open.exec(html); m; m = open.exec(html)) {
+    if (!LD_JSON_TYPE.test(m[0])) continue;
+    close.lastIndex = open.lastIndex;
+    const end = close.exec(html);
+    if (!end) break; // no closing tag after this point, so none of the later blocks can match
+    open.lastIndex = close.lastIndex;
+
     let doc: unknown;
     try {
-      doc = JSON.parse(m[1]!);
+      doc = JSON.parse(html.slice(m.index + m[0].length, end.index));
     } catch {
       continue;
     }
@@ -39,6 +48,8 @@ function fromJsonLd(html: string): ExtractedPrice | null {
   }
   return null;
 }
+
+const LD_JSON_TYPE = /\btype\s*=\s*["']application\/ld\+json["']/i;
 
 function fromOffer(offer: unknown): ExtractedPrice | null {
   if (!isRecord(offer)) return null;
@@ -74,7 +85,8 @@ function hasType(node: Record<string, unknown>, type: string): boolean {
 // ───────────────────────── Meta tags ─────────────────────────
 
 function fromMeta(html: string): ExtractedPrice | null {
-  const metas = [...html.matchAll(/<meta\b[^>]*>/gi)].map((m) => attrs(m[0]));
+  // Tags are bounded and cannot contain `<`, so each scan stops at the next tag.
+  const metas = [...html.matchAll(/<meta\b[^<>]{0,1000}>/gi)].map((m) => attrs(m[0]));
 
   const content = (names: string[]) => {
     for (const a of metas) {
@@ -100,10 +112,14 @@ function fromMeta(html: string): ExtractedPrice | null {
 }
 
 function itempropPrice(html: string): string | null {
-  const m = /<[^>]+itemprop\s*=\s*["']price["'][^>]*>/i.exec(html);
-  if (!m) return null;
-  const a = attrs(m[0]);
-  return a.content ?? a.value ?? null;
+  // Match the tag first, then test it: an unbounded `<[^>]+itemprop` is quadratic
+  // on pages with many `<` and no `>`.
+  for (const m of html.matchAll(/<[^<>]{0,2000}>/g)) {
+    if (!/\bitemprop\s*=\s*["']price["']/i.test(m[0])) continue;
+    const a = attrs(m[0]);
+    return a.content ?? a.value ?? null;
+  }
+  return null;
 }
 
 function stockFromWords(v: string): boolean | null {
@@ -114,7 +130,8 @@ function stockFromWords(v: string): boolean | null {
 
 function attrs(tag: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const m of tag.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+  // Names are capped in length so a long run of letters cannot backtrack for long.
+  for (const m of tag.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]{0,100})\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
     out[m[1]!.toLowerCase()] = decodeEntities(m[2] ?? m[3] ?? '');
   }
   return out;
@@ -139,9 +156,9 @@ export function parsePrice(value: unknown): number | null {
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0)) // Persian digits
     .replace(/٫/g, '.') // Arabic decimal separator
     .replace(/[٬\s ']/g, '') // Arabic thousands separator, spaces
-    .replace(/[^\d.,]/g, '')
-    // Currency symbols such as "ر.س" / "د.إ" leave stray separators at the edges.
-    .replace(/^[.,]+|[.,]+$/g, '');
+    .replace(/[^\d.,]/g, '');
+  // Currency symbols such as "ر.س" / "د.إ" leave stray separators at the edges.
+  s = trimSeparators(s);
   if (!/\d/.test(s)) return null;
 
   const lastDot = s.lastIndexOf('.');
@@ -157,6 +174,16 @@ export function parsePrice(value: unknown): number | null {
     s = s.replace(/\./g, ''); // "1.299.000"
   }
   return valid(Number(s));
+}
+
+/** Strips leading and trailing `.`/`,` in one linear pass (`/[.,]+$/` is quadratic on long runs). */
+function trimSeparators(s: string): string {
+  const isSep = (c: string) => c === '.' || c === ',';
+  let start = 0;
+  let end = s.length;
+  while (start < end && isSep(s[start]!)) start++;
+  while (end > start && isSep(s[end - 1]!)) end--;
+  return s.slice(start, end);
 }
 
 function valid(n: number): number | null {
