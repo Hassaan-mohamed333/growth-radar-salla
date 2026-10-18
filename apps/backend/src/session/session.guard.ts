@@ -28,8 +28,10 @@ export class SessionGuard implements CanActivate {
     const ctx = this.sessions.verify(this.sessions.readCookie(req));
     if (!ctx) throw new UnauthorizedException();
 
+    // Only ACTIVE stores. An uninstalled or suspended store must not keep reading its data
+    // on a cookie issued before the uninstall; reinstalling sets the status back to ACTIVE.
     const store = await this.prisma.store.findFirst({
-      where: { id: ctx.storeId, tenantId: ctx.tenantId },
+      where: { id: ctx.storeId, tenantId: ctx.tenantId, status: 'ACTIVE' },
       select: { id: true },
     });
     if (!store) throw new UnauthorizedException();

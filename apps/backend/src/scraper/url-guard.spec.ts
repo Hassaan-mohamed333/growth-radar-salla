@@ -43,6 +43,18 @@ describe('parseCompetitorUrl', () => {
     expect(kindOf(() => parseCompetitorUrl(u))).toBe('forbidden_target');
   });
 
+  it.each(['https://example.com:8443/x', 'http://example.com:8080/x', 'https://example.com:25/x'])(
+    'rejects non-standard port in %s',
+    (u) => {
+      expect(kindOf(() => parseCompetitorUrl(u))).toBe('invalid_url');
+    },
+  );
+
+  it('accepts the standard ports, written out or implied', () => {
+    expect(parseCompetitorUrl('https://example.com:443/x').port).toBe('');
+    expect(parseCompetitorUrl('http://example.com:80/x').port).toBe('');
+  });
+
   it('rejects over-long URLs', () => {
     expect(kindOf(() => parseCompetitorUrl(`https://example.com/${'a'.repeat(3000)}`))).toBe(
       'invalid_url',
@@ -51,7 +63,7 @@ describe('parseCompetitorUrl', () => {
 });
 
 describe('isPublicAddress', () => {
-  it.each(['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111'])('%s is public', (a) => {
+  it.each(['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '2001:4860:4860::8888'])('%s is public', (a) => {
     expect(isPublicAddress(a)).toBe(true);
   });
 
@@ -73,6 +85,12 @@ describe('isPublicAddress', () => {
     'ff02::1',
     '::ffff:10.0.0.1',
     '::ffff:7f00:1',
+    // IPv4-compatible, NAT64 and 6to4 forms that embed a private IPv4 address.
+    '::7f00:1',
+    '0:0:0:0:0:0:7f00:1',
+    '64:ff9b::7f00:1',
+    '64:ff9b::a00:1',
+    '2002:7f00:1::',
     'garbage',
   ])('%s is not public', (a) => {
     expect(isPublicAddress(a)).toBe(false);

@@ -25,10 +25,12 @@ const html = (res: http.ServerResponse, body: string, status = 200) => {
 };
 
 // Loopback is reachable only because the test opts in; production never does.
+// The server listens on an ephemeral port, so the 80/443 rule is opted out here as well.
 const fetcher = (over: Partial<HttpPageFetcherOptions> = {}) =>
   new HttpPageFetcher({
     userAgent: 'TestBot/1.0',
     allowPrivateAddresses: true,
+    allowNonStandardPorts: true,
     resolve: toLoopback,
     ...over,
   });
@@ -145,13 +147,18 @@ describe('HttpPageFetcher', () => {
 
   it('blocks a public-looking host that resolves to loopback (DNS rebinding)', async () => {
     handler = (_req, res) => html(res, 'secret');
-    const strict = new HttpPageFetcher({ userAgent: 'TestBot/1.0', resolve: toLoopback });
+    const strict = new HttpPageFetcher({
+      userAgent: 'TestBot/1.0',
+      resolve: toLoopback,
+      allowNonStandardPorts: true, // the test server's port; the DNS check is what is under test
+    });
     expect((await failureOf(strict.fetchHtml(`${origin}/`))).kind).toBe('forbidden_target');
   });
 
   it('blocks when any resolved address is private', async () => {
     const mixed = new HttpPageFetcher({
       userAgent: 'TestBot/1.0',
+      allowNonStandardPorts: true,
       resolve: async () => [
         { address: '93.184.216.34', family: 4 },
         { address: '10.0.0.5', family: 4 },
@@ -163,6 +170,13 @@ describe('HttpPageFetcher', () => {
   it('rejects literal internal URLs before any request', async () => {
     const err = await failureOf(new HttpPageFetcher({ userAgent: 'x' }).fetchHtml('http://127.0.0.1:1/'));
     expect(err.kind).toBe('forbidden_target');
+  });
+
+  it('refuses a non-standard port in production, before any request', async () => {
+    const err = await failureOf(
+      new HttpPageFetcher({ userAgent: 'x', resolve: toLoopback }).fetchHtml('https://shop.example.com:8443/'),
+    );
+    expect(err.kind).toBe('invalid_url');
   });
 });
 

@@ -160,6 +160,20 @@ describe('HTTP API against real PostgreSQL', () => {
       });
       expect(res.status).toBe(401);
     });
+
+    it.each(['UNINSTALLED', 'SUSPENDED'] as const)(
+      'a session issued before the store became %s stops working, and reinstall restores it',
+      async (status) => {
+        expect((await call('GET', '/api/v1/products', { as: a })).status).toBe(200);
+
+        await prisma.store.update({ where: { id: a.storeId }, data: { status } });
+        expect((await call('GET', '/api/v1/products', { as: a })).status).toBe(401);
+
+        // Reinstall: the OAuth callback sets the store back to ACTIVE.
+        await prisma.store.update({ where: { id: a.storeId }, data: { status: 'ACTIVE' } });
+        expect((await call('GET', '/api/v1/products', { as: a })).status).toBe(200);
+      },
+    );
   });
 
   describe('scoping and validation', () => {

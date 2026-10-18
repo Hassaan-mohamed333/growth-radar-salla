@@ -3,7 +3,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import type { LookupFunction } from 'node:net';
 import { ScrapeError } from './scrape-error';
-import { isPublicAddress, parseCompetitorUrl } from './url-guard';
+import { type CompetitorUrlOptions, isPublicAddress, parseCompetitorUrl } from './url-guard';
 
 /** Abstraction over "get me the HTML of this page", so a headless browser or a
  * third-party scraping API can replace the plain HTTP implementation later. */
@@ -18,6 +18,8 @@ export interface HttpPageFetcherOptions {
   maxRedirects?: number;
   /** Tests only: allow loopback targets. Never wired to configuration. */
   allowPrivateAddresses?: boolean;
+  /** Tests only: see CompetitorUrlOptions. Production keeps the 80/443 rule. */
+  allowNonStandardPorts?: boolean;
   /** Host → addresses. Defaults to the system resolver; tests inject a fake. */
   resolve?: (hostname: string) => Promise<Array<{ address: string; family: number }>>;
 }
@@ -56,7 +58,8 @@ export class HttpPageFetcher extends PageFetcher {
   }
 
   async fetchHtml(rawUrl: string): Promise<string> {
-    let url = parseCompetitorUrl(rawUrl);
+    const urlOptions: CompetitorUrlOptions = { allowNonStandardPorts: this.opts.allowNonStandardPorts };
+    let url = parseCompetitorUrl(rawUrl, urlOptions);
 
     for (let hop = 0; hop <= this.maxRedirects; hop++) {
       const res = await this.get(url);
@@ -65,7 +68,7 @@ export class HttpPageFetcher extends PageFetcher {
 
       if (res.status >= 300 && res.status < 400 && res.headers.location) {
         // Re-validate every hop: a public URL may redirect to an internal one.
-        url = parseCompetitorUrl(new URL(res.headers.location, url).toString());
+        url = parseCompetitorUrl(new URL(res.headers.location, url).toString(), urlOptions);
         continue;
       }
       throw classifyStatus(res.status, res.headers['retry-after']);

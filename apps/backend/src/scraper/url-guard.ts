@@ -10,8 +10,13 @@ import { ScrapeError } from './scrape-error';
 
 const MAX_URL_LENGTH = 2048;
 
+export interface CompetitorUrlOptions {
+  /** Tests only: the fetch specs listen on an ephemeral port. Never set in production. */
+  allowNonStandardPorts?: boolean;
+}
+
 /** Parses and validates a competitor URL. Throws ScrapeError('invalid_url' | 'forbidden_target'). */
-export function parseCompetitorUrl(raw: string): URL {
+export function parseCompetitorUrl(raw: string, opts: CompetitorUrlOptions = {}): URL {
   if (raw.length > MAX_URL_LENGTH) throw new ScrapeError('invalid_url', 'URL too long');
   let url: URL;
   try {
@@ -25,7 +30,6 @@ export function parseCompetitorUrl(raw: string): URL {
   if (url.username || url.password) {
     throw new ScrapeError('invalid_url', 'URLs with credentials are not allowed');
   }
-
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     throw new ScrapeError('forbidden_target', 'Internal hostname');
@@ -36,6 +40,11 @@ export function parseCompetitorUrl(raw: string): URL {
   // A bare single-label host ("intranet") can only resolve internally.
   if (!isIP(host) && !host.includes('.')) {
     throw new ScrapeError('invalid_url', 'Hostname must be a public domain');
+  }
+  // Checked after the host rules so internal targets still report as forbidden_target.
+  // `port` is empty when it is the scheme default, so only 80 and 443 pass.
+  if (url.port && !opts.allowNonStandardPorts) {
+    throw new ScrapeError('invalid_url', 'Only standard web ports are allowed');
   }
   return url;
 }
@@ -77,8 +86,13 @@ function isPublicV6(a: string): boolean {
     const lo = parseInt(mappedHex[2]!, 16);
     return isPublicV4(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`);
   }
-  if (addr === '::' || addr === '::1') return false;
-  const first = parseInt(addr.split(':')[0] || '0', 16);
+  const hextets = addr.split(':');
+  const first = parseInt(hextets[0] || '0', 16);
+  // ::/16 holds unspecified, loopback and IPv4-compatible (::a.b.c.d) addresses. None are public.
+  if (first === 0) return false;
+  // NAT64 (64:ff9b::/96) and 6to4 (2002::/16) embed an IPv4 address, which can be private.
+  if (first === 0x2002) return false;
+  if (first === 0x64 && parseInt(hextets[1] || '0', 16) === 0xff9b) return false;
   if ((first & 0xfe00) === 0xfc00) return false; // fc00::/7 unique local
   if ((first & 0xffc0) === 0xfe80) return false; // fe80::/10 link-local
   if ((first & 0xff00) === 0xff00) return false; // ff00::/8 multicast
