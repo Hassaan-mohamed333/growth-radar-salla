@@ -1,65 +1,115 @@
 'use client';
 
-import { useState } from 'react';
+// Accept / dismiss with an optimistic update: the card switches to its decided state the moment
+// the merchant clicks, then the server confirms. If the request fails the card is restored and
+// an error toast explains why, so the screen never shows a decision that was not saved.
+//
+// Accepting only records the merchant's intent. The price is still changed by the merchant in
+// Salla; the backend never writes prices.
+
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { failureMessage, send } from '../../lib/client-api';
+import { useToast } from '../toast';
 
-// Inlined at build time; must be the browser-reachable backend origin.
-const API_URL = ''; // same-origin: next.config rewrites /api to the backend
+export type Decision = 'ACCEPTED' | 'DISMISSED';
 
-/**
- * Accept / dismiss a pending recommendation. Accepting only records the merchant's
- * intent — the price is still changed by the merchant in Salla.
- */
-export function DecisionButtons({ id }: { id: string }) {
+interface DecisionState {
+  decided: Decision | null;
+  decide: (decision: Decision) => void;
+}
+
+const DecisionContext = createContext<DecisionState | null>(null);
+
+const decidedText: Record<Decision, string> = {
+  ACCEPTED: 'قُبلت التوصية. طبّق السعر من لوحة سلة.',
+  DISMISSED: 'تم تجاهل التوصية.',
+};
+
+/** The pending card's <li>. Children are server-rendered; the buttons inside read this state. */
+export function PendingRecommendation({
+  id,
+  className,
+  children,
+}: {
+  id: string;
+  className: string;
+  children: ReactNode;
+}) {
   const router = useRouter();
-  const [busy, setBusy] = useState<'ACCEPTED' | 'DISMISSED' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+  const [decided, setDecided] = useState<Decision | null>(null);
+  const inFlight = useRef(false);
 
-  async function decide(decision: 'ACCEPTED' | 'DISMISSED') {
-    setBusy(decision);
-    setError(null);
-    try {
-      const res = await fetch(`${API_URL}/api/v1/recommendations/${id}/decision`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ decision }),
-      });
-      // 409: already decided elsewhere — refreshing shows the current state.
-      if (!res.ok && res.status !== 409) throw new Error(String(res.status));
+  async function decide(decision: Decision) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setDecided(decision); // optimistic
+
+    const res = await send('POST', `/api/v1/recommendations/${id}/decision`, { decision });
+    inFlight.current = false;
+
+    if (res.ok) {
+      toast.success(decidedText[decision]);
       router.refresh();
-    } catch {
-      setError('تعذّر حفظ القرار. حاول مرة أخرى.');
-    } finally {
-      setBusy(null);
+      return;
     }
+    setDecided(null); // roll back
+    if (res.status === 409) {
+      // Decided elsewhere (another tab or device). The refreshed list shows the real state.
+      toast.info('سبق اتخاذ قرار بشأن هذه التوصية. حدّثنا القائمة.');
+      router.refresh();
+      return;
+    }
+    toast.error(failureMessage(res.status));
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => void decide('ACCEPTED')}
-          className="rounded-lg bg-brand-dark hover:bg-brand-darkest px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-        >
-          {busy === 'ACCEPTED' ? 'جارٍ الحفظ…' : 'سأطبّقها'}
-        </button>
-        <button
-          type="button"
-          disabled={busy !== null}
-          onClick={() => void decide('DISMISSED')}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-        >
-          {busy === 'DISMISSED' ? 'جارٍ الحفظ…' : 'تجاهل'}
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="text-xs text-red-700">
-          {error}
-        </p>
-      )}
+    <DecisionContext.Provider value={{ decided, decide: (d) => void decide(d) }}>
+      <li
+        aria-busy={decided !== null}
+        className={`${className} transition-opacity duration-300 motion-reduce:transition-none ${
+          decided ? 'opacity-60' : ''
+        }`}
+      >
+        {children}
+      </li>
+    </DecisionContext.Provider>
+  );
+}
+
+export function DecisionButtons() {
+  const state = useContext(DecisionContext);
+  if (!state) throw new Error('DecisionButtons must be rendered inside <PendingRecommendation>');
+  const { decided, decide } = state;
+
+  if (decided) {
+    return (
+      <p role="status" className="text-sm font-medium text-slate-700">
+        <span aria-hidden className="me-1">
+          {decided === 'ACCEPTED' ? '✓' : '—'}
+        </span>
+        {decidedText[decided]}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => decide('ACCEPTED')}
+        className="rounded-lg bg-brand-dark px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-darkest"
+      >
+        سأطبّقها
+      </button>
+      <button
+        type="button"
+        onClick={() => decide('DISMISSED')}
+        className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        تجاهل
+      </button>
     </div>
   );
 }

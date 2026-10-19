@@ -4,6 +4,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CompetitorItem } from '../../lib/api';
 import { failureMessage, send } from '../../lib/client-api';
+import { checkCompetitorUrl } from '../../lib/url-guard';
+import { useToast } from '../toast';
 
 type Competitor = Pick<CompetitorItem, 'id' | 'name' | 'productUrl'>;
 
@@ -39,39 +41,62 @@ export function EditCompetitorDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const ref = useModal();
   const titleId = useId();
   const nameId = useId();
   const urlId = useId();
   const hintId = useId();
+  const urlErrorId = useId();
   const [name, setName] = useState(competitor.name);
   const [url, setUrl] = useState(competitor.productUrl ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+
+  /** An empty URL is allowed (it clears the listing); anything else must pass the pre-check. */
+  function validateUrl(raw: string): string | null {
+    if (!raw.trim()) return null;
+    const check = checkCompetitorUrl(raw);
+    return check.ok ? null : check.message;
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    setError(null);
     const trimmed = name.trim();
     if (!trimmed) {
       setError('اسم المنافس مطلوب.');
       return;
     }
+    const problem = validateUrl(url);
+    if (problem) {
+      setUrlError(problem);
+      document.getElementById(urlId)?.focus();
+      return;
+    }
+    setUrlError(null);
     setBusy(true);
-    setError(null);
     // An empty URL sends null, which clears the listing and stops scraping it.
     const res = await send('PATCH', `/api/v1/competitors/${competitor.id}`, {
       name: trimmed,
       productUrl: url.trim() || null,
     });
     setBusy(false);
-    if (!res.ok) return setError(failureMessage(res.status, res.message));
+    if (!res.ok) {
+      // A 400 carrying a reason is about the URL: show it next to the field.
+      if (res.status === 400 && res.message) setUrlError(res.message);
+      else setError(failureMessage(res.status, res.message));
+      return;
+    }
     onClose();
+    toast.success('حُفظت التعديلات.');
     router.refresh();
   }
 
   return (
     <dialog ref={ref} aria-labelledby={titleId} onClose={onClose} className={dialogClass}>
-      <form onSubmit={submit} className="space-y-4 p-6">
+      <form onSubmit={submit} noValidate className="space-y-4 p-6">
         <h2 id={titleId} className="text-base font-bold text-brand-darkest">
           تعديل المنافس
         </h2>
@@ -101,10 +126,20 @@ export function EditCompetitorDialog({
             maxLength={2048}
             placeholder="https://"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            aria-describedby={hintId}
-            className={inputClass}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              if (urlError) setUrlError(validateUrl(e.target.value));
+            }}
+            onBlur={() => setUrlError(validateUrl(url))}
+            aria-invalid={urlError !== null}
+            aria-describedby={urlError ? `${hintId} ${urlErrorId}` : hintId}
+            className={`${inputClass} ${urlError ? 'border-red-400' : ''}`}
           />
+          {urlError && (
+            <p id={urlErrorId} role="alert" className="text-xs text-red-700">
+              {urlError}
+            </p>
+          )}
           <p id={hintId} className="text-xs text-slate-500">
             {competitor.productUrl
               ? 'أفرغ الحقل لإيقاف فحص الرابط والاكتفاء بتسجيل السعر يدويًا.'
@@ -139,6 +174,7 @@ export function DeleteCompetitorDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const ref = useModal();
   const titleId = useId();
   const descId = useId();
@@ -152,6 +188,7 @@ export function DeleteCompetitorDialog({
     setBusy(false);
     if (!res.ok) return setError(failureMessage(res.status));
     onClose();
+    toast.success('حُذف المنافس.');
     router.refresh();
   }
 

@@ -2,34 +2,18 @@
 // links; only the add form and per-row actions are client components.
 
 import Link from 'next/link';
-import {
-  api,
-  settle,
-  type CompetitorItem,
-  type CompetitorList,
-  type ScrapeFailureKind,
-} from '../../lib/api';
+import { api, settle, type CompetitorItem, type CompetitorList } from '../../lib/api';
 import { formatDate, money, nf } from '../../lib/format';
+import { failureLabel } from '../../lib/labels';
 import { AppShell, SignIn } from '../app-shell';
-import { AddCompetitorForm } from './add-competitor-form';
+import { AddCompetitorDialog } from './add-competitor-dialog';
 import { CompetitorActions } from './competitor-actions';
+import { LivePrice, LiveRow, LiveStatus } from './competitor-live';
 import { CompetitorMenu } from './competitor-menu';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 25;
-
-const failureLabel: Record<ScrapeFailureKind, string> = {
-  invalid_url: 'رابط غير صالح',
-  forbidden_target: 'الرابط غير مسموح به',
-  network: 'تعذّر الاتصال بالموقع',
-  blocked: 'الموقع يمنع الفحص الآلي — سجّل السعر يدويًا',
-  http_error: 'استجابة خاطئة من الموقع',
-  not_html: 'الرابط ليس صفحة ويب',
-  too_large: 'الصفحة كبيرة جدًا',
-  parse_failed: 'لم يُعثر على السعر في الصفحة',
-  currency_mismatch: 'عملة السعر مختلفة عن عملة المنتج',
-};
 
 interface Filters {
   page: number;
@@ -88,12 +72,13 @@ export default async function CompetitorsPage({
         </div>
       )}
 
-      <p className="text-sm text-slate-600">
-        اربط صفحة المنتج عند منافسك بمنتج من متجرك لتتم مقارنة السعر وتوليد التوصيات. يُفحص الرابط
-        تلقائيًا عند تفعيل الفحص الآلي، ويمكنك دائمًا تسجيل السعر يدويًا.
-      </p>
-
-      <AddCompetitorForm />
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="min-w-0 flex-1 text-sm text-slate-600">
+          اربط صفحة المنتج عند منافسك بمنتج من متجرك لتتم مقارنة السعر وتوليد التوصيات. يُفحص الرابط
+          تلقائيًا عند تفعيل الفحص الآلي، ويمكنك دائمًا تسجيل السعر يدويًا.
+        </p>
+        <AddCompetitorDialog />
+      </div>
 
       <form
         method="get"
@@ -138,7 +123,7 @@ function CompetitorTable({ list, filters }: { list: CompetitorList; filters: Fil
       <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
         {filters.search
           ? 'لا يوجد منافسون يطابقون البحث.'
-          : 'لم تُضف أي منافس بعد. ابدأ بإضافة رابط منتج من موقع منافس أعلاه.'}
+          : 'لم تُضف أي منافس بعد. اضغط «إضافة منافس» وأدخل رابط منتج من موقع منافس.'}
       </p>
     );
   }
@@ -199,8 +184,10 @@ function CompetitorTable({ list, filters }: { list: CompetitorList; filters: Fil
 }
 
 function CompetitorRow({ c }: { c: CompetitorItem }) {
+  const server = { isActive: c.isActive, lastPrice: c.lastPrice, lastCheckedAt: c.lastCheckedAt };
+
   return (
-    <tr className={c.isActive ? undefined : 'bg-slate-50 text-slate-500'}>
+    <LiveRow id={c.id} server={server}>
       <td className="max-w-xs px-4 py-3">
         <p className="truncate font-medium">{c.name}</p>
         <p className="truncate text-xs text-slate-500" dir="ltr">
@@ -215,32 +202,39 @@ function CompetitorRow({ c }: { c: CompetitorItem }) {
         )}
       </td>
       <td className="px-4 py-3 tabular-nums">
-        {c.lastPrice === null ? (
-          <span className="text-slate-400">—</span>
-        ) : (
-          <>
-            <span className="font-medium">{money(Number(c.lastPrice), c.currency)}</span>
-            <span className="block text-xs text-slate-500">{formatDate(c.lastCheckedAt)}</span>
-          </>
-        )}
+        <LivePrice id={c.id} server={server} currency={c.currency}>
+          {c.lastPrice === null ? (
+            <span className="text-slate-400">—</span>
+          ) : (
+            <>
+              <span className="font-medium">{money(Number(c.lastPrice), c.currency)}</span>
+              <span className="block text-xs text-slate-500">{formatDate(c.lastCheckedAt)}</span>
+            </>
+          )}
+        </LivePrice>
       </td>
       <td className="px-4 py-3">
-        <StatusCell c={c} />
+        <LiveStatus
+          id={c.id}
+          server={server}
+          active={<ActiveStatus c={c} />}
+          paused={
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium">متوقف</span>
+          }
+        />
       </td>
       <td className="px-4 py-3">
         <div className="flex items-start justify-between gap-2">
-          <CompetitorActions id={c.id} isActive={c.isActive} />
+          <CompetitorActions id={c.id} server={server} />
           <CompetitorMenu competitor={c} />
         </div>
       </td>
-    </tr>
+    </LiveRow>
   );
 }
 
-function StatusCell({ c }: { c: CompetitorItem }) {
-  if (!c.isActive) {
-    return <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium">متوقف</span>;
-  }
+/** Status of a tracked (not paused) competitor. The paused pill is rendered by the caller. */
+function ActiveStatus({ c }: { c: CompetitorItem }) {
   if (c.lastScrapeError) {
     return (
       <div>

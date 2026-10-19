@@ -11,12 +11,18 @@ import {
   type StoreStatus,
 } from '../lib/api';
 import { nf } from '../lib/format';
+import { BrandLogo, BrandLogoFull, BrandMark } from './brand';
 import { UserMenu } from './user-menu';
 
-export type NavKey = 'overview' | 'products' | 'competitors' | 'recommendations' | 'confidence';
+export type NavKey =
+  | 'overview'
+  | 'products'
+  | 'competitors'
+  | 'recommendations'
+  | 'confidence';
 
 /** Entries without `href` are planned sections and render as inert text, not dead links. */
-const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
+export const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
   { key: 'overview', label: 'نظرة عامة', href: '/' },
   { key: 'products', label: 'المنتجات', href: '/products' },
   { key: 'competitors', label: 'المنافسون', href: '/competitors' },
@@ -53,7 +59,9 @@ export async function AppShell({
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar — sits at the inline-start edge (right in RTL) */}
       <aside className="hidden w-64 shrink-0 border-e border-slate-200 bg-white md:block">
-        <div className="px-6 py-5 text-xl font-bold text-brand-dark">راصد</div>
+        <Link href="/" aria-label="راصد — الرئيسية" className="block px-6 py-5">
+          <BrandLogo />
+        </Link>
         <nav aria-label="القائمة الرئيسية" className="px-3">
           <ul className="space-y-1">
             {nav.map((item) => (
@@ -92,7 +100,13 @@ export async function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-          <h1 className="text-lg font-bold text-brand-darkest">{title}</h1>
+          <div className="flex min-w-0 items-center gap-3">
+            {/* The sidebar is hidden below md, so the mark carries the brand on small screens. */}
+            <Link href="/" aria-label="راصد — الرئيسية" className="md:hidden">
+              <BrandMark size={32} />
+            </Link>
+            <h1 className="truncate text-lg font-bold text-brand-darkest">{title}</h1>
+          </div>
           <div className="flex items-center gap-3">
             <span
               className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${badge.pill}`}
@@ -114,7 +128,8 @@ export function SignIn() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 text-center">
-        <h1 className="text-xl font-bold text-brand-dark">راصد</h1>
+        <BrandLogoFull size={176} />
+        <h1 className="sr-only">راصد</h1>
         <p className="mt-3 text-sm text-slate-600">سجّل الدخول عبر متجرك في سلة للوصول إلى لوحة التحكم.</p>
         <a
           href={SALLA_LOGIN_URL}

@@ -204,6 +204,7 @@ export interface RecommendationDetails {
   currency: string;
   currentPrice: number;
   lowestPrice: number;
+  competitorId: string;
   competitorName: string;
   competitorsCompared: number;
   gapPct: number;
@@ -212,6 +213,8 @@ export interface RecommendationDetails {
   priceChangePct: number | null;
   suggestedMarginPct: number | null;
   marginFloorPrice: number | null;
+  /** Identity of the situation, used by the backend to avoid re-raising a decided one. Not shown. */
+  signature: string;
 }
 
 export interface RecommendationItem {
@@ -257,10 +260,11 @@ export class ApiError extends Error {
   }
 }
 
-// API_URL is server-only; NEXT_PUBLIC_API_URL is the shared fallback.
+// API_URL is server-only; NEXT_PUBLIC_API_URL is the shared fallback. Empty counts as unset
+// (a Docker build arg that was not passed arrives as an empty string).
 const BASE_URL = (
-  process.env.API_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
+  process.env.API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:4000'
 ).replace(/\/$/, '');
 

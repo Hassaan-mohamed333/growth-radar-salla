@@ -10,7 +10,8 @@ import {
 } from '../../lib/api';
 import { formatDate, money, nf, signedPct } from '../../lib/format';
 import { AppShell, SignIn } from '../app-shell';
-import { DecisionButtons } from './decision-buttons';
+import { DecisionButtons, PendingRecommendation } from './decision-buttons';
+import { ExportCsvButton } from './export-csv-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,13 +76,21 @@ export default async function RecommendationsPage({
 }) {
   const { tab, page } = parse(await searchParams);
   const flags = { unauthorized: false };
-  const [status, list, blockers] = await Promise.all([
+  const [status, list, blockers, pendingElsewhere] = await Promise.all([
     settle(api.storeStatus(), flags),
     settle(api.recommendations({ status: tab, page, pageSize: PAGE_SIZE }), flags),
     settle(api.recommendationBlockers(), flags),
+    // On the pending tab the list itself is the pending count; elsewhere one cheap row-count call.
+    tab === 'PENDING'
+      ? Promise.resolve(null)
+      : settle(api.recommendations({ status: 'PENDING', pageSize: 1 }), flags),
   ]);
 
   if (flags.unauthorized) return <SignIn />;
+
+  const pendingCount = pendingElsewhere?.total ?? 0;
+  const hasBlockers =
+    blockers !== null && (blockers.productsWithoutCost > 0 || blockers.failingCompetitorsCount > 0);
 
   return (
     <AppShell active="recommendations" title="التوصيات" status={status}>
@@ -100,16 +109,10 @@ export default async function RecommendationsPage({
       </p>
 
       <div className="flex justify-end">
-        <a
-          href={`/api/v1/recommendations/export.csv?status=${tab}`}
-          download
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          تصدير CSV
-        </a>
+        <ExportCsvButton status={tab} total={list?.total ?? 0} />
       </div>
 
-      {blockers && (blockers.productsWithoutCost > 0 || blockers.failingCompetitorsCount > 0) && (
+      {(hasBlockers || pendingCount > 0) && blockers !== null && (
         <section
           aria-labelledby="blockers-heading"
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
@@ -118,6 +121,14 @@ export default async function RecommendationsPage({
             مشكلات تمنع توصيات دقيقة
           </h2>
           <ul className="mt-2 list-disc space-y-1 ps-5">
+            {pendingCount > 0 && (
+              <li>
+                {nf.format(pendingCount)} توصية معلّقة بانتظار قرارك.{' '}
+                <Link href="/recommendations" className="font-medium underline">
+                  عرض المعلّقة
+                </Link>
+              </li>
+            )}
             {blockers.productsWithoutCost > 0 && (
               <li>
                 {nf.format(blockers.productsWithoutCost)} منتجًا بدون تكلفة، ولا يُقترح لها سعر لأن
@@ -221,9 +232,10 @@ function RecommendationCards({ list, tab }: { list: RecommendationList; tab: Tab
 
 function RecommendationCard({ rec }: { rec: RecommendationItem }) {
   const d = rec.details;
+  const cardClass = 'rounded-xl border border-slate-200 bg-white p-5';
 
-  return (
-    <li className="rounded-xl border border-slate-200 bg-white p-5">
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs text-slate-500">
@@ -273,9 +285,18 @@ function RecommendationCard({ rec }: { rec: RecommendationItem }) {
             ? `صالحة حتى ${formatDate(rec.expiresAt)}`
             : `قرار بتاريخ ${formatDate(rec.decidedAt)}`}
         </p>
-        {rec.status === 'PENDING' && <DecisionButtons id={rec.id} />}
+        {rec.status === 'PENDING' && <DecisionButtons />}
       </div>
-    </li>
+    </>
+  );
+
+  // Pending cards are client-side so a decision shows at once; decided ones are static.
+  return rec.status === 'PENDING' ? (
+    <PendingRecommendation id={rec.id} className={cardClass}>
+      {body}
+    </PendingRecommendation>
+  ) : (
+    <li className={cardClass}>{body}</li>
   );
 }
 

@@ -3,6 +3,8 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { failureMessage, getJson, send } from '../../lib/client-api';
+import { checkCompetitorUrl } from '../../lib/url-guard';
+import { useToast } from '../toast';
 
 interface ProductHit {
   id: string;
@@ -15,11 +17,24 @@ interface ProductHit {
  * (what the recommendation engine compares against); leaving it empty adds a
  * store-level competitor that can be linked later.
  */
-export function AddCompetitorForm() {
+export function AddCompetitorForm({
+  bare = false,
+  onDone,
+  onCancel,
+}: {
+  /** Render without its own card chrome, for use inside a dialog. */
+  bare?: boolean;
+  /** Called after a competitor was added. */
+  onDone?: () => void;
+  /** Shows a cancel button that calls this. */
+  onCancel?: () => void;
+}) {
   const router = useRouter();
   const urlId = useId();
   const nameId = useId();
   const productId = useId();
+  const urlErrorId = useId();
+  const toast = useToast();
 
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
@@ -28,7 +43,7 @@ export function AddCompetitorForm() {
   const [product, setProduct] = useState<ProductHit | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
 
   // Debounced product search; stale responses are aborted.
   useEffect(() => {
@@ -53,9 +68,18 @@ export function AddCompetitorForm() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
-    setAdded(false);
+
+    // Pre-check in the browser so the merchant sees the reason at once. The backend repeats
+    // the check (and more), so this only saves a round trip.
+    const problem = validateUrl(url);
+    if (problem) {
+      setUrlError(problem);
+      document.getElementById(urlId)?.focus();
+      return;
+    }
+    setUrlError(null);
+    setBusy(true);
 
     const productUrl = url.trim();
     const label = name.trim();
@@ -71,21 +95,25 @@ export function AddCompetitorForm() {
 
     setBusy(false);
     if (!res.ok) {
-      setError(failureMessage(res.status, res.message));
+      // A 400 carrying a reason is about the URL: show it next to the field.
+      if (res.status === 400 && res.message) setUrlError(res.message);
+      else setError(failureMessage(res.status, res.message));
       return;
     }
     setUrl('');
     setName('');
     setQuery('');
     setProduct(null);
-    setAdded(true);
+    onDone?.();
+    toast.success('تمت إضافة المنافس.');
     router.refresh();
   }
 
   return (
     <form
       onSubmit={submit}
-      className="space-y-4 rounded-xl border border-slate-200 bg-white p-5"
+      noValidate
+      className={bare ? 'space-y-4 p-6' : 'space-y-4 rounded-xl border border-slate-200 bg-white p-5'}
       aria-labelledby="add-heading"
     >
       <h2 id="add-heading" className="text-base font-bold">
@@ -105,9 +133,25 @@ export function AddCompetitorForm() {
             dir="ltr"
             placeholder="https://competitor.example/products/…"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            onChange={(e) => {
+              setUrl(e.target.value);
+              // Once an error is showing, re-check as the merchant fixes it.
+              if (urlError) setUrlError(validateUrl(e.target.value));
+            }}
+            onBlur={() => {
+              if (url.trim()) setUrlError(validateUrl(url));
+            }}
+            aria-invalid={urlError !== null}
+            aria-describedby={urlError ? urlErrorId : undefined}
+            className={`w-full rounded-lg border px-3 py-2 text-sm ${
+              urlError ? 'border-red-400 focus:outline-red-500' : 'border-slate-300'
+            }`}
           />
+          {urlError && (
+            <p id={urlErrorId} role="alert" className="mt-1 text-xs text-red-700">
+              {urlError}
+            </p>
+          )}
         </div>
 
         <div>
@@ -185,19 +229,31 @@ export function AddCompetitorForm() {
         >
           {busy ? 'جارٍ الإضافة…' : 'إضافة'}
         </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            إلغاء
+          </button>
+        )}
         {error && (
           <p role="alert" className="text-sm text-red-700">
             {error}
           </p>
         )}
-        {added && (
-          <p role="status" className="text-sm text-emerald-700">
-            تمت إضافة المنافس.
-          </p>
-        )}
       </div>
     </form>
   );
+}
+
+/** Merchant-facing reason the URL cannot be used, or null when it passes the browser check. */
+function validateUrl(raw: string): string | null {
+  if (!raw.trim()) return 'أدخل رابط صفحة المنتج عند المنافس.';
+  const check = checkCompetitorUrl(raw);
+  return check.ok ? null : check.message;
 }
 
 function hostnameOf(raw: string): string {

@@ -1,5 +1,7 @@
 // Data confidence — server component. Status tabs and pagination are plain links.
-// Explains how much each pricing signal can be trusted, and which input is weakest.
+// Explains how much each pricing signal can be trusted, which input is weakest, how the
+// competitor scrapers are doing, and which competitors are mapped to which products.
+// The animated pieces (gauge, bars, mapping filter) are small client components.
 
 import Link from 'next/link';
 import {
@@ -7,14 +9,21 @@ import {
   settle,
   type AuditItem,
   type AuditStatus,
+  type CompetitorList,
   type DataConfidence,
 } from '../../lib/api';
-import { formatDate, nf } from '../../lib/format';
+import { formatDate, money, nf } from '../../lib/format';
 import { AppShell, SignIn } from '../app-shell';
+import { healthOf } from './health';
+import { MappingsPanel, type MappingRow } from './mappings';
+import { ScraperHealth } from './scrapers';
+import { AnimatedBar, ScoreRing, StackedSplit } from './visuals';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 20;
+/** One API page of competitors (the backend's maximum page size). */
+const COMPETITORS_SHOWN = 100;
 
 type Tab = 'ALL' | AuditStatus;
 
@@ -87,6 +96,27 @@ function scoreWord(score: number | null): string {
   return 'ثقة منخفضة';
 }
 
+/** Rows for the mapping table. Everything is formatted here, on the server. */
+function mappingRows(list: CompetitorList, audits: AuditItem[]): MappingRow[] {
+  // Audits arrive newest first, so the first one seen per competitor is its latest.
+  const latest = new Map<string, number>();
+  for (const a of audits) {
+    if (a.entityType === 'competitor' && a.entity && !latest.has(a.entity.id)) {
+      latest.set(a.entity.id, a.score);
+    }
+  }
+  return list.items.map((c) => ({
+    id: c.id,
+    name: c.name,
+    domain: c.domain,
+    productName: c.product?.name ?? null,
+    health: healthOf(c),
+    price: c.lastPrice === null ? null : money(Number(c.lastPrice), c.currency),
+    checked: c.lastCheckedAt ? formatDate(c.lastCheckedAt) : null,
+    confidence: latest.get(c.id) ?? null,
+  }));
+}
+
 export default async function DataConfidencePage({
   searchParams,
 }: {
@@ -94,9 +124,10 @@ export default async function DataConfidencePage({
 }) {
   const { tab, page } = parse(await searchParams);
   const flags = { unauthorized: false };
-  const [status, data] = await Promise.all([
+  const [status, data, competitors] = await Promise.all([
     settle(api.storeStatus(), flags),
     settle(api.dataConfidence({ status: tab, page, pageSize: PAGE_SIZE }), flags),
+    settle(api.competitors({ pageSize: COMPETITORS_SHOWN }), flags),
   ]);
 
   if (flags.unauthorized) return <SignIn />;
@@ -120,6 +151,26 @@ export default async function DataConfidencePage({
       {data ? (
         <>
           <Summary data={data} />
+
+          {competitors ? (
+            <div className="space-y-4">
+              <ScraperHealth competitors={competitors} />
+              <MappingsPanel
+                rows={mappingRows(competitors, data.items)}
+                total={competitors.total}
+              />
+            </div>
+          ) : (
+            status !== null && (
+              <p
+                role="alert"
+                className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+              >
+                تعذّر تحميل حالة المنافسين. بقية البيانات معروضة أدناه.
+              </p>
+            )
+          )}
+
           <nav aria-label="حالة التدقيق" className="flex flex-wrap gap-2">
             {tabs.map((t) => (
               <Link
@@ -140,7 +191,10 @@ export default async function DataConfidencePage({
         </>
       ) : (
         status !== null && (
-          <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <p
+            role="alert"
+            className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600"
+          >
             تعذّر تحميل بيانات الثقة. حاول مرة أخرى بعد قليل.
           </p>
         )
@@ -151,30 +205,32 @@ export default async function DataConfidencePage({
 
 function Summary({ data }: { data: DataConfidence }) {
   const s = data.summary;
-  const cards = [
-    {
-      label: 'متوسط الثقة',
-      value: s.averageScore === null ? '—' : `${nf.format(s.averageScore)}%`,
-      hint: scoreWord(s.averageScore),
-    },
-    { label: 'موثوقة', value: nf.format(s.byStatus.PASSED), hint: 'تدقيقات ناجحة' },
-    { label: 'تحتاج مراجعة', value: nf.format(s.byStatus.WARNING), hint: 'ثقة متوسطة' },
-    { label: 'ضعيفة', value: nf.format(s.byStatus.FAILED), hint: 'لا يُعتمد عليها' },
-  ];
 
   return (
     <>
-      <section aria-label="ملخص الثقة">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {cards.map((c) => (
-            <div key={c.label} className="rounded-xl border border-slate-200 bg-white p-5">
-              <p className="text-sm text-slate-500">{c.label}</p>
-              <p className="mt-2 text-3xl font-bold tabular-nums">{c.value}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {c.hint} · آخر {nf.format(s.windowDays)} يومًا
-              </p>
-            </div>
-          ))}
+      <section
+        aria-label="ملخص الثقة"
+        className="grid items-center gap-6 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-[auto_1fr]"
+      >
+        <div className="flex justify-center">
+          <ScoreRing score={s.averageScore} caption={scoreWord(s.averageScore)} />
+        </div>
+        <div className="min-w-0 space-y-4">
+          <div>
+            <h2 className="text-base font-bold">متوسط الثقة وتوزيع التدقيقات</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              آخر {nf.format(s.windowDays)} يومًا · {nf.format(s.auditsCount)} تدقيق
+            </p>
+          </div>
+          <StackedSplit
+            label="توزيع التدقيقات"
+            segments={(['PASSED', 'WARNING', 'FAILED'] as const).map((key) => ({
+              key,
+              label: statusBadge[key].label,
+              count: s.byStatus[key],
+              bar: statusBadge[key].bar,
+            }))}
+          />
         </div>
       </section>
 
@@ -188,7 +244,7 @@ function Summary({ data }: { data: DataConfidence }) {
           </p>
         ) : (
           <ul className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-            {s.checks.map((c) => {
+            {s.checks.map((c, i) => {
               const info = checkInfo[c.name];
               return (
                 <li key={c.name}>
@@ -202,9 +258,10 @@ function Summary({ data }: { data: DataConfidence }) {
                     aria-hidden
                     className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100"
                   >
-                    <div
-                      className={`h-full rounded-full ${scoreTone(c.averageScore)}`}
-                      style={{ width: `${Math.min(100, Math.max(0, c.averageScore))}%` }}
+                    <AnimatedBar
+                      value={c.averageScore}
+                      className={scoreTone(c.averageScore)}
+                      delayMs={i * 80}
                     />
                   </div>
                   {info && <p className="mt-1 text-xs text-slate-500">{info.hint}</p>}
