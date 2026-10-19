@@ -188,6 +188,20 @@ describe('Salla OAuth login flow (HTTP + Postgres + Redis emulation)', () => {
     );
   });
 
+  it('treats a state cookie with broken percent-encoding as an invalid state, not a server error', async () => {
+    const { state } = await startLogin();
+
+    // "%E0%A4%A" is not valid UTF-8 percent-encoding: decodeURIComponent throws on it.
+    const r = await get(
+      `/api/v1/auth/salla/callback?code=c&state=${state}`,
+      `${STATE_COOKIE}=%E0%A4%A`,
+    );
+
+    expect(r.status).toBe(302);
+    expect(r.location).toBe('http://localhost:3000/?auth_error=invalid_state');
+    expect(salla.tokenRequests).toHaveLength(0);
+  });
+
   it('maps provider errors and failed exchanges to a fixed error and writes nothing', async () => {
     const denied = await get('/api/v1/auth/salla/callback?error=access_denied&state=x');
     expect(denied.location).toBe('http://localhost:3000/?auth_error=exchange_failed');

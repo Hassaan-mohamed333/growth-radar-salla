@@ -122,7 +122,13 @@ function readCookie(req: Request, name: string): string | undefined {
   for (const part of header.split(';')) {
     const idx = part.indexOf('=');
     if (idx > 0 && part.slice(0, idx).trim() === name) {
-      return decodeURIComponent(part.slice(idx + 1).trim());
+      try {
+        return decodeURIComponent(part.slice(idx + 1).trim());
+      } catch {
+        // Broken percent-encoding. Treated as "no cookie" so the caller answers with the
+        // controlled invalid_state redirect instead of a 500.
+        return undefined;
+      }
     }
   }
   return undefined;

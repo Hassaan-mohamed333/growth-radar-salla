@@ -15,6 +15,13 @@ const aes256Key = z
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
+  /**
+   * How many reverse proxies sit in front of the API (Express `trust proxy`). One on Render alone;
+   * with the Vercel rewrite in front of Render the real client may be one hop further out.
+   * Measure on staging (log req.ip against X-Forwarded-For) before changing it.
+   */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
+  /** Public address of the dashboard. Production must set it: the localhost default is rejected. */
   FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
 
   DATABASE_URL: z.string().min(1),
@@ -92,9 +99,55 @@ export const envSchema = z.object({
     .default('offline_access settings.read orders.read products.read'),
   SALLA_WEBHOOK_SECRET: z.string().min(16, 'SALLA_WEBHOOK_SECRET looks too short'),
   SALLA_WEBHOOK_STRATEGY: z.enum(['signature', 'token']).default('signature'),
-});
+}).superRefine(productionChecks);
 
 export type Env = z.infer<typeof envSchema>;
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0']);
+/** The route AuthController serves; Salla calls the registered URL verbatim, so the path must match. */
+const OAUTH_CALLBACK_PATH = '/api/v1/auth/salla/callback';
+
+/**
+ * Settings that fall back to a harmless localhost default in development but would break login in
+ * production, silently. A wrong value should stop the boot with a clear reason, not surface as
+ * "invalid_state" for every merchant after deploy.
+ */
+function productionChecks(
+  env: { NODE_ENV: string; FRONTEND_ORIGIN: string; SALLA_REDIRECT_URI: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (env.NODE_ENV !== 'production') return;
+
+  const issue = (key: string, message: string) =>
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message });
+
+  const frontend = new URL(env.FRONTEND_ORIGIN);
+  const redirect = new URL(env.SALLA_REDIRECT_URI);
+
+  for (const [key, url] of [
+    ['FRONTEND_ORIGIN', frontend],
+    ['SALLA_REDIRECT_URI', redirect],
+  ] as const) {
+    if (url.protocol !== 'https:') {
+      issue(key, 'must use https in production (session cookies are Secure, and Salla requires it)');
+    }
+    if (LOCAL_HOSTS.has(url.hostname)) {
+      issue(key, 'must be the public address, not localhost: set it explicitly in production');
+    }
+  }
+
+  // The OAuth state cookie is stored by the browser for the host that started the login. The
+  // callback must come back to that same host, i.e. through the dashboard's /api rewrite.
+  if (redirect.origin !== frontend.origin) {
+    issue(
+      'SALLA_REDIRECT_URI',
+      `must be on the dashboard origin (${frontend.origin}) so the OAuth state cookie is sent back`,
+    );
+  }
+  if (redirect.pathname !== OAUTH_CALLBACK_PATH) {
+    issue('SALLA_REDIRECT_URI', `path must be ${OAUTH_CALLBACK_PATH}`);
+  }
+}
 
 /** Used by ConfigModule.forRoot({ validate }) — fails fast at boot on bad config. */
 export function validateEnv(raw: Record<string, unknown>): Env {

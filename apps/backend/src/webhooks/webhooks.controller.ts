@@ -28,6 +28,13 @@ export class WebhooksController {
   @HttpCode(200)
   @SallaWebhook()
   async handleSalla(@Body() payload: SallaWebhookPayload): Promise<{ status: string }> {
+    // The signature proves the sender, not the shape. A body without a string `event` is
+    // acknowledged and dropped: failing it would only make Salla retry something unprocessable.
+    if (typeof payload !== 'object' || payload === null || typeof payload.event !== 'string') {
+      this.logger.warn('Signed Salla webhook without an event name ignored');
+      return { status: 'ignored' };
+    }
+
     // Log the event name and merchant only — payloads can contain tokens and PII.
     this.logger.log(`Salla event "${payload.event}" for merchant ${payload.merchant ?? 'n/a'}`);
 

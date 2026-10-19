@@ -11,9 +11,11 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   const config = app.get(ConfigService<Env, true>);
 
-  // Render terminates TLS in front of the app: trust exactly one proxy hop so the
-  // client IP (used by the rate limiter) comes from X-Forwarded-For, not the proxy.
-  app.set('trust proxy', 1);
+  // Reverse proxies in front of the app (Render terminates TLS). Trust exactly that many hops so
+  // req.ip comes from X-Forwarded-For instead of the proxy's own address. Never `true`: that would
+  // let any client spoof its IP. Authenticated rate limits do not depend on this (see
+  // SessionThrottlerGuard); it only matters for anonymous routes.
+  app.set('trust proxy', config.get('TRUST_PROXY_HOPS', { infer: true }));
   app.disable('x-powered-by');
   app.use(helmet());
   app.enableCors({

@@ -271,6 +271,19 @@ describe('Salla webhooks over HTTP (signature + idempotency + handlers)', () => 
     expect(p).toMatchObject({ status: 'SALE', quantity: 5 });
   });
 
+  it.each([
+    ['an object without an event', JSON.stringify({ merchant: 1, data: {} })],
+    ['a non-string event', JSON.stringify({ event: 42, merchant: 1 })],
+    ['an array', '[]'],
+  ])('acknowledges and ignores a correctly signed body that is %s', async (_name, raw) => {
+    // Answering 500 here would make Salla retry a body that can never be processed.
+    const res = await post(raw, { 'x-salla-signature': sign(raw) });
+
+    expect(res.status).toBe(200);
+    expect(res.json).toEqual({ status: 'ignored' });
+    expect(await prisma.product.count()).toBe(0);
+  });
+
   it('answers 200 for unrelated events and for merchants we do not know', async () => {
     const unrelated = signed('customer.created', { id: 1 });
     expect((await post(unrelated.raw, unrelated.headers)).status).toBe(200);
