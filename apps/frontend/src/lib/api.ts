@@ -244,6 +244,78 @@ export interface RecommendationBlockers {
   failingCompetitors: Array<{ id: string; name: string; scrapeFailures: number }>;
 }
 
+// ───────── Competitor insights (mirrors apps/backend/src/competitor-insights/*.service.ts) ─────────
+
+export type CompetitorKind = 'MARKETPLACE' | 'RETAILER' | 'SPECIALIST';
+
+export type DiscoveryReason =
+  | { code: 'niche_overlap'; niche: string; products: number }
+  | { code: 'marketplace' };
+
+export interface DiscoveryItem {
+  id: string;
+  catalogKey: string;
+  name: string;
+  domain: string;
+  kind: CompetitorKind;
+  countryCode: string;
+  currency: string;
+  niches: string[];
+  /** 0-100 share of the store's products in a niche this competitor covers. */
+  score: number;
+  reasons: DiscoveryReason[];
+  status: 'SUGGESTED' | 'ADDED' | 'DISMISSED';
+  competitorId: string | null;
+}
+
+export interface NicheItem {
+  key: string;
+  label: string;
+  productCount: number;
+  sharePct: number;
+  trackedCompetitors: number;
+  suggestedCompetitors: number;
+}
+
+export interface SwotItem {
+  code: string;
+  params: Record<string, number | string | string[]>;
+}
+
+export interface SwotFacts {
+  activeProducts: number;
+  productsWithCost: number;
+  trackedCompetitors: number;
+  failingCompetitors: number;
+  comparedProducts: number;
+  undercutProducts: number;
+  cheapestProducts: number;
+  topNiche: { key: string; sharePct: number } | null;
+  uncoveredNiches: Array<{ key: string; products: number; suggestions: number }>;
+  suggestionCount: number;
+  overlappingMarketplaces: string[];
+}
+
+export interface SwotReport {
+  generatedAt: string;
+  strengths: SwotItem[];
+  weaknesses: SwotItem[];
+  opportunities: SwotItem[];
+  threats: SwotItem[];
+  basis: SwotFacts;
+}
+
+export interface InsightsOverview {
+  /** False when the store prices in a currency other than SAR (discovery is Saudi-only). */
+  eligible: boolean;
+  currency: string;
+  reason: 'currency_not_sar' | null;
+  niches: NicheItem[];
+  suggestions: DiscoveryItem[];
+  addedCount: number;
+  swot: SwotReport | null;
+}
+
 export interface RecommendationQuery {
   status?: 'PENDING' | 'ACCEPTED' | 'DISMISSED' | 'ALL';
   page?: number;
@@ -326,6 +398,7 @@ export const api = {
     return get<RecommendationList>(`/api/v1/recommendations${qs ? `?${qs}` : ''}`);
   },
   recommendationBlockers: () => get<RecommendationBlockers>('/api/v1/recommendations/blockers'),
+  competitorInsights: () => get<InsightsOverview>('/api/v1/competitor-insights'),
   products: (q: ProductQuery = {}) => {
     const params = new URLSearchParams();
     if (q.page) params.set('page', String(q.page));

@@ -85,6 +85,14 @@ enum RecommendationStatus {
   @@map("recommendation_status")
 }
 
+enum DiscoveryStatus {
+  SUGGESTED
+  ADDED
+  DISMISSED
+
+  @@map("discovery_status")
+}
+
 // ───────────────────────── Models ─────────────────────────
 
 model Tenant {
@@ -95,42 +103,48 @@ model Tenant {
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  stores              Store[]
-  users               User[]
-  connections         SallaConnection[]
-  products            Product[]
-  competitors         Competitor[]
-  confidenceAudits    DataConfidenceAudit[]
-  recommendations     DecisionRecommendation[]
-  competitorPrices    CompetitorPriceHistory[]
-  salesSnapshots      SalesSnapshot[]
+  stores                Store[]
+  users                 User[]
+  connections           SallaConnection[]
+  products              Product[]
+  competitors           Competitor[]
+  confidenceAudits      DataConfidenceAudit[]
+  recommendations       DecisionRecommendation[]
+  competitorPrices      CompetitorPriceHistory[]
+  salesSnapshots        SalesSnapshot[]
+  competitorDiscoveries CompetitorDiscovery[]
+  nicheInsights         NicheInsight[]
+  swotReports           SwotReport[]
 
   @@map("tenants")
 }
 
 model Store {
-  id             String      @id @default(uuid()) @db.Uuid
-  tenantId       String      @map("tenant_id") @db.Uuid
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @map("tenant_id") @db.Uuid
   /// Salla merchant id (from webhook `merchant` field / OAuth user info).
-  sallaMerchantId String     @unique @map("salla_merchant_id")
-  name           String
-  domain         String?
-  currency       String      @default("SAR") @db.VarChar(3)
-  locale         String      @default("ar") @db.VarChar(10)
-  status         StoreStatus @default(ACTIVE)
-  installedAt    DateTime    @default(now()) @map("installed_at") @db.Timestamptz(6)
-  uninstalledAt  DateTime?   @map("uninstalled_at") @db.Timestamptz(6)
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  sallaMerchantId String      @unique @map("salla_merchant_id")
+  name            String
+  domain          String?
+  currency        String      @default("SAR") @db.VarChar(3)
+  locale          String      @default("ar") @db.VarChar(10)
+  status          StoreStatus @default(ACTIVE)
+  installedAt     DateTime    @default(now()) @map("installed_at") @db.Timestamptz(6)
+  uninstalledAt   DateTime?   @map("uninstalled_at") @db.Timestamptz(6)
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  connection      SallaConnection?
-  products        Product[]
-  competitors     Competitor[]
-  confidenceAudits DataConfidenceAudit[]
-  recommendations DecisionRecommendation[]
-  competitorPrices CompetitorPriceHistory[]
-  salesSnapshots  SalesSnapshot[]
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection            SallaConnection?
+  products              Product[]
+  competitors           Competitor[]
+  confidenceAudits      DataConfidenceAudit[]
+  recommendations       DecisionRecommendation[]
+  competitorPrices      CompetitorPriceHistory[]
+  salesSnapshots        SalesSnapshot[]
+  competitorDiscoveries CompetitorDiscovery[]
+  nicheInsights         NicheInsight[]
+  swotReports           SwotReport[]
 
   @@index([tenantId])
   @@map("stores")
@@ -148,7 +162,7 @@ model User {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant                 Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   decidedRecommendations DecisionRecommendation[]
 
   @@unique([tenantId, email])
@@ -215,31 +229,32 @@ model Product {
 }
 
 model Competitor {
-  id            String    @id @default(uuid()) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  storeId       String    @map("store_id") @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  storeId         String    @map("store_id") @db.Uuid
   /// Our product this competitor listing is compared against (optional: store-level competitor).
-  productId     String?   @map("product_id") @db.Uuid
-  name          String
-  domain        String
-  productUrl    String?   @map("product_url")
-  lastPrice     Decimal?  @map("last_price") @db.Decimal(12, 2)
-  currency      String    @default("SAR") @db.VarChar(3)
-  isActive      Boolean   @default(true) @map("is_active")
-  lastCheckedAt DateTime? @map("last_checked_at") @db.Timestamptz(6)
+  productId       String?   @map("product_id") @db.Uuid
+  name            String
+  domain          String
+  productUrl      String?   @map("product_url")
+  lastPrice       Decimal?  @map("last_price") @db.Decimal(12, 2)
+  currency        String    @default("SAR") @db.VarChar(3)
+  isActive        Boolean   @default(true) @map("is_active")
+  lastCheckedAt   DateTime? @map("last_checked_at") @db.Timestamptz(6)
   /// Consecutive failed scrapes; reset on success. Drives retry backoff.
-  scrapeFailures Int      @default(0) @map("scrape_failures")
+  scrapeFailures  Int       @default(0) @map("scrape_failures")
   /// Fixed-vocabulary reason of the last failed scrape (never a raw error/response).
-  lastScrapeError String? @map("last_scrape_error")
+  lastScrapeError String?   @map("last_scrape_error")
   /// Earliest time the scraper may fetch this listing again (null = due now).
-  nextScrapeAt  DateTime? @map("next_scrape_at") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  nextScrapeAt    DateTime? @map("next_scrape_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store        Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product      Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
   priceHistory CompetitorPriceHistory[]
+  discoveries  CompetitorDiscovery[]
 
   @@unique([storeId, domain, productUrl])
   @@index([tenantId])
@@ -254,18 +269,18 @@ model Competitor {
 /// Only insert a row when the price (or availability) changed, or on a periodic
 /// heartbeat, to keep the table small.
 model CompetitorPriceHistory {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  storeId      String   @map("store_id") @db.Uuid
-  competitorId String   @map("competitor_id") @db.Uuid
-  price        Decimal  @db.Decimal(12, 2)
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  competitorId  String   @map("competitor_id") @db.Uuid
+  price         Decimal  @db.Decimal(12, 2)
   /// Price before this observation (null for the first one), so change % needs no self-join.
   previousPrice Decimal? @map("previous_price") @db.Decimal(12, 2)
-  currency     String   @default("SAR") @db.VarChar(3)
-  inStock      Boolean? @map("in_stock")
+  currency      String   @default("SAR") @db.VarChar(3)
+  inStock       Boolean? @map("in_stock")
   /// Where the price came from, e.g. "scraper", "manual".
-  source       String
-  observedAt   DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
+  source        String
+  observedAt    DateTime @default(now()) @map("observed_at") @db.Timestamptz(6)
 
   tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   store      Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -281,17 +296,17 @@ model CompetitorPriceHistory {
 /// Sales velocity = unitsSold / days over a window. Upserted from Salla order
 /// data / order webhooks; re-running a day overwrites it, so it is idempotent.
 model SalesSnapshot {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  storeId      String   @map("store_id") @db.Uuid
-  date         DateTime @db.Date
-  ordersCount  Int      @default(0) @map("orders_count")
-  unitsSold    Int      @default(0) @map("units_sold")
-  grossRevenue Decimal  @default(0) @map("gross_revenue") @db.Decimal(14, 2)
-  refundedRevenue Decimal @default(0) @map("refunded_revenue") @db.Decimal(14, 2)
-  currency     String   @default("SAR") @db.VarChar(3)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  storeId         String   @map("store_id") @db.Uuid
+  date            DateTime @db.Date
+  ordersCount     Int      @default(0) @map("orders_count")
+  unitsSold       Int      @default(0) @map("units_sold")
+  grossRevenue    Decimal  @default(0) @map("gross_revenue") @db.Decimal(14, 2)
+  refundedRevenue Decimal  @default(0) @map("refunded_revenue") @db.Decimal(14, 2)
+  currency        String   @default("SAR") @db.VarChar(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -356,4 +371,88 @@ model DecisionRecommendation {
   @@index([storeId, status, createdAt])
   @@index([productId])
   @@map("decision_recommendations")
+}
+
+// ───────────────────────── Competitor insights (Saudi market) ─────────────────────────
+
+/// A Saudi competitor the engine suggests for a store. A suggestion, not a tracked competitor:
+/// it becomes a `competitors` row only when the merchant adds it (competitorId then points at it).
+model CompetitorDiscovery {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  storeId      String          @map("store_id") @db.Uuid
+  /// Catalogue key, stable across catalogue edits.
+  catalogKey   String          @map("catalog_key")
+  name         String
+  domain       String
+  /// MARKETPLACE | RETAILER | SPECIALIST
+  kind         String
+  countryCode  String          @default("SA") @map("country_code") @db.VarChar(2)
+  currency     String          @default("SAR") @db.VarChar(3)
+  /// Niche keys of the store this competitor overlaps with.
+  niches       String[]
+  /// 0-100 overlap score: share of the store's catalogue in the competitor's niches.
+  score        Int
+  /// Fixed-vocabulary reason codes with counts, e.g. [{"code":"niche_overlap","niche":"electronics","products":12}].
+  reasons      Json
+  status       DiscoveryStatus @default(SUGGESTED)
+  /// Set once the merchant adds it to the tracked list.
+  competitorId String?         @map("competitor_id") @db.Uuid
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  competitor Competitor? @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, domain])
+  @@index([tenantId])
+  @@index([storeId, status, score(sort: Desc)])
+  @@map("competitor_discoveries")
+}
+
+/// How the store's catalogue splits across niches (derived from product names), and how many
+/// tracked or suggested competitors cover each.
+model NicheInsight {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  storeId              String   @map("store_id") @db.Uuid
+  niche                String
+  label                String
+  productCount         Int      @map("product_count")
+  /// Share of the store's active products, 0-100 with one decimal.
+  sharePct             Decimal  @map("share_pct") @db.Decimal(5, 1)
+  trackedCompetitors   Int      @map("tracked_competitors")
+  suggestedCompetitors Int      @map("suggested_competitors")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, niche])
+  @@index([tenantId])
+  @@map("niche_insights")
+}
+
+/// A SWOT snapshot built only from the store's own data. Each section is a list of
+/// {code, params} items (fixed vocabulary), rendered to text by the dashboard.
+model SwotReport {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  storeId       String   @map("store_id") @db.Uuid
+  strengths     Json
+  weaknesses    Json
+  opportunities Json
+  threats       Json
+  /// The counts the report was computed from, so it can be audited.
+  basis         Json
+  generatedAt   DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([storeId, generatedAt(sort: Desc)])
+  @@map("swot_reports")
 }

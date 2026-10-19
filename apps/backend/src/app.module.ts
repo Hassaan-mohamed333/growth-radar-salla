@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { validateEnv } from './config/env';
 import { AuthModule } from './auth/auth.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { CompetitorInsightsModule } from './competitor-insights/competitor-insights.module';
 import { CompetitorsModule } from './competitors/competitors.module';
 import { DataConfidenceModule } from './data-confidence/data-confidence.module';
 import { StoreModule } from './store/store.module';
@@ -43,6 +44,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     StoreModule,
     AnalyticsModule,
     CompetitorsModule,
+    CompetitorInsightsModule,
     DataConfidenceModule,
     ScraperModule,
     RecommendationsModule,

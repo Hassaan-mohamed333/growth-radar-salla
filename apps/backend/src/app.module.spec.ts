@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AppModule } from './app.module';
 import { AuthModule } from './auth/auth.module';
+import { CompetitorInsightsModule } from './competitor-insights/competitor-insights.module';
 import { CompetitorsModule } from './competitors/competitors.module';
 import { DataConfidenceModule } from './data-confidence/data-confidence.module';
 import { ProductsModule } from './products/products.module';
@@ -21,6 +22,7 @@ describe('AppModule', () => {
       StoreModule,
       AnalyticsModule,
       CompetitorsModule,
+      CompetitorInsightsModule,
       DataConfidenceModule,
       ProductsModule,
       RecommendationsModule,
