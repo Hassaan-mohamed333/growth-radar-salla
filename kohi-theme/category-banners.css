@@ -1,0 +1,101 @@
+/* KOHI – "اختر ما يناسب ذوقك" category banners section.
+   Paste into Salla theme custom CSS. Scoped to this section's component-id.
+   The markup has no text, so heading/subtitle/card titles are injected with
+   ::before / ::after; edit the strings below to change them. */
+
+.s-block--banners[component-id="1595654731"] {
+  --kohi-ink: #332B25;
+  --kohi-brown: #664A39;
+  --kohi-radius: 16px;
+  font-family: 'Somar Sans', sans-serif;
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Heading: اختر ما يناسب ذوقك */
+.s-block--banners[component-id="1595654731"]::before {
+  content: "اختر ما يناسب ذوقك";
+  font-weight: 700;
+  font-size: 38px;
+  line-height: 49px;
+  color: #000;
+  text-align: center;
+}
+
+/* Cards grid: 4 x 378 with 16px gap (1560px container) */
+.s-block--banners[component-id="1595654731"] > .grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Subtitle + short underline: تصفح حسب الفئة */
+.s-block--banners[component-id="1595654731"] > .grid::before {
+  content: "تصفح حسب الفئة";
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin-top: -16px; /* sit directly under the heading */
+  padding-bottom: 14px;
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 34px;
+  color: var(--kohi-brown);
+  background: linear-gradient(var(--kohi-brown), var(--kohi-brown)) bottom center / 57px 2px no-repeat;
+}
+
+/* Card + title column */
+.s-block--banners[component-id="1595654731"] .banner-entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start; /* RTL: title hugs the right edge */
+  gap: 8px;
+}
+
+.s-block--banners[component-id="1595654731"] .banner-entry .lazy__bg {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 378 / 340;
+  background-color: #B3B3B3;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: var(--kohi-radius);
+}
+
+/* Whole entry (image + title) is clickable */
+.s-block--banners[component-id="1595654731"] .banner-entry > a {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* Title with underline that matches the text width */
+.s-block--banners[component-id="1595654731"] .banner-entry::after {
+  font-weight: 600;
+  font-size: 28px;
+  line-height: 49px;
+  color: var(--kohi-ink);
+  border-bottom: 2px solid var(--kohi-ink);
+}
+.s-block--banners[component-id="1595654731"] .banner-entry:nth-child(1)::after { content: "بكجات القهوة"; }
+.s-block--banners[component-id="1595654731"] .banner-entry:nth-child(2)::after { content: "محاصيل قهوة فاخرة"; }
+.s-block--banners[component-id="1595654731"] .banner-entry:nth-child(3)::after { content: "عروض كوهي"; }
+.s-block--banners[component-id="1595654731"] .banner-entry:nth-child(4)::after { content: "الأكثر مبيعا"; }
+
+@media (max-width: 1023px) {
+  .s-block--banners[component-id="1595654731"] > .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 639px) {
+  .s-block--banners[component-id="1595654731"]::before { font-size: 26px; line-height: 36px; }
+  .s-block--banners[component-id="1595654731"] > .grid { gap: 12px; }
+  .s-block--banners[component-id="1595654731"] > .grid::before { margin-top: -12px; font-size: 16px; }
+  .s-block--banners[component-id="1595654731"] .banner-entry::after { font-size: 18px; line-height: 32px; }
+}
