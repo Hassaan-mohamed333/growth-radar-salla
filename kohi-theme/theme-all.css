@@ -1,0 +1,394 @@
+/* Add custom CSS styles below */
+
+/* =====================================================================
+   1) CATEGORY BANNERS  (اختر ما يناسب ذوقك)
+   Each banner image already contains its own text, so the cards show the
+   full image, uncropped, with nothing injected on top.
+   ===================================================================== */
+
+section.s-block--banners[component-id="1595654731"] {
+  --kohi-brown: #664A39;
+  --kohi-radius: 16px;
+  font-family: 'Somar Sans', sans-serif;
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* "section" prefix keeps this 4-column grid stronger than the generic
+   2-column rule in block 4 below */
+section.s-block--banners[component-id="1595654731"] > .grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Card = the full image (text included) */
+.s-block--banners[component-id="1595654731"] .banner-entry {
+  position: relative;
+  height: 300px;
+  background-color: transparent;
+}
+
+.s-block--banners[component-id="1595654731"] .banner-entry .lazy__bg {
+  position: relative;
+  width: 100%;
+  background-color: transparent;
+  background-size: contain; /* never crop the baked-in text */
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 0;
+}
+
+.s-block--banners[component-id="1595654731"] .banner-entry > a {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+@media (max-width: 1023px) {
+  .s-block--banners[component-id="1595654731"] .banner-entry {
+    height: 200px;
+  }
+
+  section.s-block--banners[component-id="1595654731"] > .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
+/* =====================================================================
+   2) PRODUCTS
+   ===================================================================== */
+
+.product-card--filled-mini-cart .product-card__mini-cart__btn .s-button-btn,
+.product-card--filled-normal-cart .product-card__normal-cart__btn .s-button-btn {
+  background-color: #84796A !important;
+  border: none;
+  color: var(--white-color);
+}
+
+.s-button-primary-outline:hover {
+  background-color: var(--main-color);
+}
+
+.s-product-card-entry {
+  transform: translate(0, 0);
+  transition: all .5s ease-in-out;
+  border: 1px solid var(--main-color);
+  box-shadow: 1px 1px 3px 2px #ddd !important;
+}
+
+.s-product-card-entry:hover {
+  transform: translate(0, -10px);
+  box-shadow: 3px 3px 5px 4px #ddd !important;
+}
+
+.s-product-card-content * {
+  justify-content: center;
+  text-align: center;
+}
+
+h4.s-product-card-price {
+  color: red;
+}
+
+img.s-product-card-image-contain.lazy.loaded {
+  background-color: var(--white-color);
+}
+
+
+/* =====================================================================
+   3) SLIDER ARROWS & "DISPLAY ALL" LINK
+   ===================================================================== */
+
+button.s-slider-next.s-slider-nav-arrow:hover,
+button.s-slider-prev.s-slider-nav-arrow:hover {
+  background-color: var(--main-color);
+  border: none;
+  transform: translateX(-3px);
+}
+
+button.s-slider-prev.s-slider-nav-arrow:hover {
+  transform: translateX(3px);
+}
+
+a.s-slider-block__display-all {
+  color: var(--main-color);
+}
+
+
+/* =====================================================================
+   4) BANNERS – SECTION 2 (generic 2-column banners grid)
+   ===================================================================== */
+
+.s-block--banners.s-block--banners .grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr);
+  grid-column-gap: 10px;
+  grid-row-gap: 0;
+}
+
+section.s-block.s-block--banners.container:nth-of-type(8) .banner-entry {
+  height: 385px !important;
+}
+
+section.s-block.s-block--banners.container a.banner-entry.square-photos {
+  background-color: transparent;
+}
+
+@media (max-width: 767px) {
+  .s-block--banners.s-block--banners .grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    grid-column-gap: 10px;
+    grid-row-gap: 10px;
+  }
+
+  section.s-block.s-block--banners.container:nth-of-type(8) .banner-entry {
+    height: 125px !important;
+  }
+}
+
+
+/* =====================================================================
+   5) FOOTER  (dark #332B25, 100px top radius)
+   ===================================================================== */
+
+.store-footer.basic-footer {
+  --kohi-bg: #332B25;
+  --kohi-cream: #F8F0E7;
+  --kohi-chip: #F3F4F6;
+  --kohi-line: #D0C9B9;
+  font-family: 'Somar Sans', sans-serif;
+  background: var(--kohi-bg) !important;
+  border-radius: 100px 100px 0 0 !important;
+  box-shadow: none !important;
+  color: #fff;
+  overflow: hidden;
+}
+
+.store-footer.basic-footer .store-footer__inner {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: #fff;
+}
+
+.store-footer.basic-footer .store-footer__container {
+  max-width: 1480px;
+  padding: 32px 10px;
+}
+
+/* Hide the "حسابي" column – not in the design */
+.store-footer.basic-footer .store-footer__account-column {
+  display: none;
+}
+
+/* Headings */
+.store-footer.basic-footer .footer-title {
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 400;
+  color: var(--kohi-cream);
+  margin: 0 0 20px;
+}
+
+/* Desktop layout: brand | links | customer service | badges */
+@media (min-width: 1024px) {
+  .store-footer.basic-footer .store-footer__grid {
+    grid-template-columns: 1.6fr 1.2fr 1fr 1fr;
+    grid-template-rows: auto auto 1fr;
+    align-items: start;
+    column-gap: 32px;
+  }
+
+  /* lets logo / description / badges be placed individually */
+  .store-footer.basic-footer .store-footer__brand { display: contents; }
+  .store-footer.basic-footer .footer-logo { grid-column: 1; grid-row: 1; }
+  .store-footer.basic-footer .footer-description { grid-column: 1; grid-row: 2; }
+  .store-footer.basic-footer .footer-badges { grid-column: 4; grid-row: 1 / span 2; }
+  .store-footer.basic-footer .store-footer__links-column { grid-column: 2; grid-row: 1 / span 3; }
+  .store-footer.basic-footer .store-footer__contacts-column { grid-column: 3; grid-row: 1 / span 3; }
+  .store-footer.basic-footer .store-footer__apps,
+  .store-footer.basic-footer .grid-itme { grid-column: 4; grid-row: 3; }
+}
+
+/* Logo + description */
+.store-footer.basic-footer .footer-logo img {
+  height: 58px !important;
+  width: auto;
+}
+
+.store-footer.basic-footer .footer-description {
+  font-size: 15px;
+  line-height: 24px;
+  letter-spacing: -0.23px;
+  color: #fff;
+  max-width: 320px;
+}
+
+/* Commercial register + tax number */
+.store-footer.basic-footer .footer-badges {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.store-footer.basic-footer .s-trust-badges-label,
+.store-footer.basic-footer .footer-tax__number p {
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 20px;
+  color: #fff;
+}
+
+.store-footer.basic-footer .s-trust-badges-number,
+.store-footer.basic-footer .footer-tax__number b {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: #fff;
+}
+
+/* Links column */
+.store-footer.basic-footer .store-links-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 24px;
+}
+
+.store-footer.basic-footer .store-footer__menu-link {
+  font-size: 14px;
+  line-height: 14px;
+  color: var(--kohi-cream);
+}
+
+.store-footer.basic-footer .store-footer__menu-link:hover {
+  opacity: .8;
+}
+
+/* Contacts: icon-only 48px chips (phone / mail) */
+.store-footer.basic-footer .user-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.store-footer.basic-footer .user-contacts .footer-title {
+  flex-basis: 100%;
+  margin-bottom: 4px;
+}
+
+.store-footer.basic-footer .user-contacts .links-contact {
+  width: 48px;
+  height: 48px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kohi-chip);
+  border-radius: 8px;
+  margin: 0;
+}
+
+.store-footer.basic-footer .user-contacts .links-contact span {
+  display: none;
+}
+
+.store-footer.basic-footer .user-contacts .links-icon {
+  margin: 0;
+  font-size: 24px;
+  color: var(--kohi-bg);
+}
+
+/* Saudi Business Center badge text */
+.store-footer.basic-footer .store-footer__sbc-link {
+  color: #fff;
+  font-size: 14px;
+}
+
+/* Bottom bar */
+.store-footer.basic-footer .footer-bottom {
+  border-top: 1px solid var(--kohi-line);
+  background: transparent;
+}
+
+.store-footer.basic-footer .store-footer__bottom-inner {
+  max-width: 1480px;
+  padding: 14px 24px;
+}
+
+.store-footer.basic-footer .footer-rights { order: 0; }
+.store-footer.basic-footer .store-footer__bottom-social { order: 1; }
+.store-footer.basic-footer .store-footer__bottom-row > div:has(.s-payments-list-wrap) { order: 2; }
+
+.store-footer.basic-footer .footer-rights p,
+.store-footer.basic-footer .footer-rights a {
+  font-size: 14px;
+  line-height: 20px;
+  color: #fff;
+}
+
+/* Payment chips: white 48x32, radius 12 */
+.store-footer.basic-footer .s-payments-list {
+  display: flex;
+  gap: 8px;
+}
+
+.store-footer.basic-footer .s-payments-list-item {
+  width: 48px;
+  height: 32px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 12px;
+}
+
+.store-footer.basic-footer .s-payments-list-item img {
+  width: 40px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* Social: 40px round chips */
+.store-footer.basic-footer .s-social-list {
+  display: flex;
+  gap: 10px;
+}
+
+.store-footer.basic-footer .s-social-link a {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kohi-chip);
+  border-radius: 9999px;
+}
+
+.store-footer.basic-footer .s-social-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--kohi-bg);
+}
+
+.store-footer.basic-footer .s-social-icon svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--kohi-bg);
+}
+
+/* Footer – mobile */
+@media (max-width: 1023px) {
+  .store-footer.basic-footer { border-radius: 40px 40px 0 0 !important; }
+  .store-footer.basic-footer .store-footer__inner { text-align: center; }
+  .store-footer.basic-footer .footer-badges { align-items: center; }
+  .store-footer.basic-footer .user-contacts { justify-content: center; }
+  .store-footer.basic-footer .store-links-items { justify-items: center; }
+}
