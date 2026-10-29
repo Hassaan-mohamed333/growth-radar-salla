@@ -1,0 +1,37 @@
+/************  slider **************/
+section.s-block.s-block--photos-slider {
+    margin-top: 0 !important;
+}
+section.s-block.s-block--photos-slider salla-slider.photos-slider .swiper-slide{
+    padding:0 !important;
+    margin-top:10px !important;
+    width:100% !important;
+    border-radius:0 !important;
+}
+[dir=rtl] section.s-block.s-block--photos-slider salla-slider.photos-slider .swiper{
+    padding:0 !important;
+}
+
+img.w-full{
+    border-radius: 0px;
+}
+
+button.s-slider-next.s-slider-nav-arrow.swiper-button-disabled.swiper-button-lock , button.s-slider-prev.s-slider-nav-arrow.swiper-button-disabled.swiper-button-lock {
+    display:none;
+}
+
+/************ banner **************/
+section.s-block.s-block--fixed-banner.wide-placeholder > .container {
+    padding: 0 !important;
+    margin: 0px!important;
+    max-width: 100%;
+}
+
+.s-products-slider-card.swiper-slide {
+  margin-top:10px;
+    margin-bottom:10px;    
+}
+.banner--fixed img {
+    border-radius:0px;
+    background-color: transparent;
+}
