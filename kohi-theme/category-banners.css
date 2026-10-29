@@ -69,6 +69,18 @@
   z-index: 1;
 }
 
+/* English version: same headings, translated. Salla sets dir="ltr" / lang="en"
+   on <html> for the English storefront. */
+html[dir="ltr"] .s-block--banners[component-id="1595654731"] {
+  direction: ltr;
+}
+html[dir="ltr"] .s-block--banners[component-id="1595654731"]::before {
+  content: "Choose what suits your taste";
+}
+html[dir="ltr"] .s-block--banners[component-id="1595654731"] > .grid::before {
+  content: "Browse by category";
+}
+
 @media (max-width: 1023px) {
   .s-block--banners[component-id="1595654731"] > .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
