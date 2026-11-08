@@ -5,6 +5,7 @@ const facts = (over: Partial<SwotFacts> = {}): SwotFacts => ({
   productsWithCost: 5,
   trackedCompetitors: 2,
   failingCompetitors: 0,
+  checkedCompetitors: 2,
   comparedProducts: 5,
   undercutProducts: 0,
   cheapestProducts: 0,
@@ -29,10 +30,24 @@ describe('buildSwot', () => {
 
   it('reports strong cost coverage, a healthy tracked set and a focused niche as strengths', () => {
     const s = buildSwot(
-      facts({ productsWithCost: 9, trackedCompetitors: 4, failingCompetitors: 0, topNiche: { key: 'perfumes', sharePct: 55 } }),
+      facts({
+        productsWithCost: 9,
+        trackedCompetitors: 4,
+        checkedCompetitors: 4,
+        failingCompetitors: 0,
+        topNiche: { key: 'perfumes', sharePct: 55 },
+      }),
     );
     expect(codes(s.strengths)).toEqual(['cost_coverage_high', 'tracking_healthy', 'niche_focus']);
     expect(s.strengths[0]!.params).toEqual({ pct: 90 });
+    expect(s.strengths[1]!.params).toEqual({ checked: 4 });
+  });
+
+  it('does not call tracking healthy when competitors were never checked (no errors only because no attempts)', () => {
+    const neverChecked = buildSwot(facts({ trackedCompetitors: 6, checkedCompetitors: 0, failingCompetitors: 0 }));
+    expect(codes(neverChecked.strengths)).not.toContain('tracking_healthy');
+    const barelyChecked = buildSwot(facts({ trackedCompetitors: 6, checkedCompetitors: 2, failingCompetitors: 0 }));
+    expect(codes(barelyChecked.strengths)).not.toContain('tracking_healthy');
   });
 
   it('claims price leadership only with enough compared products and a clear majority', () => {

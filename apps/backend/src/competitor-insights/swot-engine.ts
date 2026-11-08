@@ -10,6 +10,8 @@ export interface SwotFacts {
   /** Active tracked competitors. */
   trackedCompetitors: number;
   failingCompetitors: number;
+  /** Active competitors with at least one recorded price check. Never-checked ones are not "healthy". */
+  checkedCompetitors: number;
   /** Products that have at least one active competitor with a known price. */
   comparedProducts: number;
   /** Of those, products where a competitor's lowest price is below ours. */
@@ -65,11 +67,13 @@ export function buildSwot(f: SwotFacts): SwotSections {
       params: { pct: pct(f.cheapestProducts, f.comparedProducts), compared: f.comparedProducts },
     });
   }
+  // Healthy means checks actually happened and mostly succeed. A competitor nobody has fetched a
+  // price for has no errors only because it was never tried.
   if (
-    f.trackedCompetitors >= MIN_TRACKED_FOR_HEALTHY &&
+    f.checkedCompetitors >= MIN_TRACKED_FOR_HEALTHY &&
     f.failingCompetitors / f.trackedCompetitors <= MAX_FAILING_RATIO_HEALTHY
   ) {
-    s.strengths.push({ code: 'tracking_healthy', params: { tracked: f.trackedCompetitors } });
+    s.strengths.push({ code: 'tracking_healthy', params: { checked: f.checkedCompetitors } });
   }
   if (f.topNiche && f.topNiche.sharePct >= NICHE_FOCUS_PCT) {
     s.strengths.push({ code: 'niche_focus', params: { niche: f.topNiche.key, pct: f.topNiche.sharePct } });

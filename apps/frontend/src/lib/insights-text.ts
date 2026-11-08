@@ -26,7 +26,8 @@ const SWOT_TEXT: Record<string, (p: Params, labels: Labels) => string> = {
   cost_coverage_high: (p) => `تكلفة معظم منتجاتك معروفة (${n(p.pct)}٪)، فيمكن حماية هامشك عند تعديل السعر.`,
   price_competitive: (p) =>
     `سعرك أقل من أو يساوي أسعار المنافسين في ${n(p.pct)}٪ من المنتجات التي تقارنها (عددها: ${n(p.compared)}).`,
-  tracking_healthy: (p) => `منافسون نشطون تتابعهم وفحصهم سليم: ${n(p.tracked)}.`,
+  // Reports saved before the "checked" count existed carry `tracked`; keep them readable.
+  tracking_healthy: (p) => `منافسون سُجّل سعرهم بنجاح وفحصهم سليم: ${n(p.checked ?? p.tracked)}.`,
   niche_focus: (p, l) => `متجرك مركّز: ${n(p.pct)}٪ من منتجاتك في «${label(l, p.niche)}».`,
   // Weaknesses
   missing_costs: (p) =>

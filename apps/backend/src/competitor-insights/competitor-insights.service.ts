@@ -130,7 +130,14 @@ export class CompetitorInsightsService {
       }),
       this.prisma.competitor.findMany({
         where: { storeId },
-        select: { domain: true, isActive: true, lastPrice: true, lastScrapeError: true, productId: true },
+        select: {
+          domain: true,
+          isActive: true,
+          lastPrice: true,
+          lastCheckedAt: true,
+          lastScrapeError: true,
+          productId: true,
+        },
       }),
       this.prisma.competitorDiscovery.findMany({
         where: { storeId },
@@ -291,7 +298,13 @@ export class CompetitorInsightsService {
 
   private facts(input: {
     products: Array<{ id: string; price: Prisma.Decimal; salePrice: Prisma.Decimal | null; costPrice: Prisma.Decimal | null }>;
-    competitors: Array<{ isActive: boolean; lastPrice: Prisma.Decimal | null; lastScrapeError: string | null; productId: string | null }>;
+    competitors: Array<{
+      isActive: boolean;
+      lastPrice: Prisma.Decimal | null;
+      lastCheckedAt: Date | null;
+      lastScrapeError: string | null;
+      productId: string | null;
+    }>;
     analysis: ReturnType<typeof analyzeNiches>;
     trackedByNiche: Map<string, number>;
     suggestedByNiche: Map<string, number>;
@@ -324,6 +337,7 @@ export class CompetitorInsightsService {
       productsWithCost: products.filter((p) => p.costPrice !== null && p.costPrice.gt(0)).length,
       trackedCompetitors: active.length,
       failingCompetitors: active.filter((c) => c.lastScrapeError !== null).length,
+      checkedCompetitors: active.filter((c) => c.lastCheckedAt !== null).length,
       comparedProducts: compared,
       undercutProducts: undercut,
       cheapestProducts: cheapest,
