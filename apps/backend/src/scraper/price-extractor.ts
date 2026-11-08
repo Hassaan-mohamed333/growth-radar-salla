@@ -20,7 +20,8 @@ export function extractPrice(html: string): ExtractedPrice | null {
 
 // ───────────────────────── JSON-LD ─────────────────────────
 
-function fromJsonLd(html: string): ExtractedPrice | null {
+/** Parsed `application/ld+json` blocks, in page order. Unparseable blocks are skipped. */
+function* jsonLdDocs(html: string): Generator<unknown> {
   // Forward-only scans with bounded tags. A lazy `[\s\S]*?</script>` restarts at every
   // unclosed opening tag, which goes quadratic on hostile pages and blocks the event loop.
   const open = /<script\b[^<>]{0,1000}>/gi;
@@ -29,15 +30,19 @@ function fromJsonLd(html: string): ExtractedPrice | null {
     if (!LD_JSON_TYPE.test(m[0])) continue;
     close.lastIndex = open.lastIndex;
     const end = close.exec(html);
-    if (!end) break; // no closing tag after this point, so none of the later blocks can match
+    if (!end) return; // no closing tag after this point, so none of the later blocks can match
     open.lastIndex = close.lastIndex;
 
-    let doc: unknown;
     try {
-      doc = JSON.parse(html.slice(m.index + m[0].length, end.index));
+      yield JSON.parse(html.slice(m.index + m[0].length, end.index));
     } catch {
       continue;
     }
+  }
+}
+
+function fromJsonLd(html: string): ExtractedPrice | null {
+  for (const doc of jsonLdDocs(html)) {
     for (const node of walk(doc)) {
       if (!hasType(node, 'Product')) continue;
       for (const offer of asArray(node.offers)) {
@@ -47,6 +52,46 @@ function fromJsonLd(html: string): ExtractedPrice | null {
     }
   }
   return null;
+}
+
+const MAX_NAME_LENGTH = 300;
+
+/**
+ * The product's own name as the page states it: schema.org `Product.name`, then the Open Graph /
+ * Twitter title, then `<title>`. Used to check that a candidate page really is the product we were
+ * looking for. Null when the page gives no usable name.
+ */
+export function extractProductName(html: string): string | null {
+  for (const doc of jsonLdDocs(html)) {
+    for (const node of walk(doc)) {
+      if (!hasType(node, 'Product')) continue;
+      const name = cleanName(node.name);
+      if (name) return name;
+    }
+  }
+
+  for (const m of html.matchAll(/<meta\b[^<>]{0,1000}>/gi)) {
+    const a = attrs(m[0]);
+    const key = (a.property ?? a.name ?? '').toLowerCase();
+    if (key === 'og:title' || key === 'twitter:title') {
+      const name = cleanName(a.content);
+      if (name) return name;
+    }
+  }
+
+  const open = /<title\b[^<>]{0,200}>/i.exec(html);
+  if (open) {
+    const from = open.index + open[0].length;
+    const end = html.indexOf('</', from);
+    if (end > from) return cleanName(html.slice(from, Math.min(end, from + 1000)));
+  }
+  return null;
+}
+
+function cleanName(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const s = decodeEntities(v).replace(/\s+/g, ' ').trim();
+  return s.length >= 2 ? s.slice(0, MAX_NAME_LENGTH) : null;
 }
 
 const LD_JSON_TYPE = /\btype\s*=\s*["']application\/ld\+json["']/i;
@@ -128,7 +173,7 @@ function stockFromWords(v: string): boolean | null {
   return null;
 }
 
-function attrs(tag: string): Record<string, string> {
+export function attrs(tag: string): Record<string, string> {
   const out: Record<string, string> = {};
   // Names are capped in length so a long run of letters cannot backtrack for long.
   for (const m of tag.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]{0,100})\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
@@ -137,8 +182,8 @@ function attrs(tag: string): Record<string, string> {
   return out;
 }
 
-function decodeEntities(s: string): string {
-  return s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+export function decodeEntities(s: string): string {
+  return s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
 // ───────────────────────── Number parsing ─────────────────────────

@@ -316,6 +316,66 @@ export interface InsightsOverview {
   swot: SwotReport | null;
 }
 
+export interface MatchedListing {
+  id: string;
+  name: string;
+  domain: string;
+  productUrl: string;
+  lastPrice: string | null;
+  lastCheckedAt: string | null;
+  lastScrapeError: string | null;
+  isActive: boolean;
+}
+
+export interface MatchSuggestion {
+  id: string;
+  productId: string;
+  domain: string;
+  candidateUrl: string;
+  candidateTitle: string;
+  candidatePrice: string | null;
+  currency: string;
+  /** 0-100 similarity between the competitor's product name and ours. */
+  score: number;
+  status: 'SUGGESTED' | 'LINKED' | 'CONFIRMED' | 'REJECTED';
+}
+
+export interface MatchedProduct {
+  id: string;
+  name: string;
+  currency: string;
+  ourPrice: string;
+  listings: MatchedListing[];
+  suggestions: MatchSuggestion[];
+  lowestCompetitorPrice: string | null;
+  /** Percent our price is above (+) or below (-) the lowest competitor. */
+  gapPct: number | null;
+}
+
+export interface MatchingOverview {
+  scraperEnabled: boolean;
+  summary: { products: number; matched: number; pendingSuggestions: number };
+  items: MatchedProduct[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export type SearchOutcomeKind = 'linked' | 'suggested' | 'none' | 'unreachable' | 'already';
+
+export interface SearchOutcome {
+  domain: string;
+  name: string;
+  outcome: SearchOutcomeKind;
+  score?: number;
+}
+
+export interface MatchingQuery {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
 export interface RecommendationQuery {
   status?: 'PENDING' | 'ACCEPTED' | 'DISMISSED' | 'ALL';
   page?: number;
@@ -399,6 +459,14 @@ export const api = {
   },
   recommendationBlockers: () => get<RecommendationBlockers>('/api/v1/recommendations/blockers'),
   competitorInsights: () => get<InsightsOverview>('/api/v1/competitor-insights'),
+  productMatching: (q: MatchingQuery = {}) => {
+    const params = new URLSearchParams();
+    if (q.page) params.set('page', String(q.page));
+    if (q.pageSize) params.set('pageSize', String(q.pageSize));
+    if (q.search) params.set('search', q.search);
+    const qs = params.toString();
+    return get<MatchingOverview>(`/api/v1/product-matching${qs ? `?${qs}` : ''}`);
+  },
   products: (q: ProductQuery = {}) => {
     const params = new URLSearchParams();
     if (q.page) params.set('page', String(q.page));

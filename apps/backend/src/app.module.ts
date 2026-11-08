@@ -8,6 +8,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CompetitorInsightsModule } from './competitor-insights/competitor-insights.module';
 import { CompetitorsModule } from './competitors/competitors.module';
 import { DataConfidenceModule } from './data-confidence/data-confidence.module';
+import { ProductMatchingModule } from './product-matching/product-matching.module';
 import { StoreModule } from './store/store.module';
 import { SecurityModule } from './security/security.module';
 import { SessionModule } from './session/session.module';
@@ -46,6 +47,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     CompetitorsModule,
     CompetitorInsightsModule,
     DataConfidenceModule,
+    ProductMatchingModule,
     ScraperModule,
     RecommendationsModule,
   ],

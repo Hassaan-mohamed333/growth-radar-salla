@@ -18,6 +18,6 @@ import { ScraperScheduler } from './scraper.scheduler';
     CompetitorPriceScraperService,
     ScraperScheduler,
   ],
-  exports: [CompetitorPriceScraperService],
+  exports: [CompetitorPriceScraperService, PageFetcher],
 })
 export class ScraperModule {}

@@ -93,6 +93,18 @@ enum DiscoveryStatus {
   @@map("discovery_status")
 }
 
+enum ProductMatchStatus {
+  /// Found a similar product but not sure enough to link it: waits for the merchant.
+  SUGGESTED
+  /// Linked automatically because the match was strong.
+  LINKED
+  /// The merchant confirmed a suggestion.
+  CONFIRMED
+  REJECTED
+
+  @@map("product_match_status")
+}
+
 // ───────────────────────── Models ─────────────────────────
 
 model Tenant {
@@ -115,6 +127,7 @@ model Tenant {
   competitorDiscoveries CompetitorDiscovery[]
   nicheInsights         NicheInsight[]
   swotReports           SwotReport[]
+  productMatches        ProductMatch[]
 
   @@map("tenants")
 }
@@ -145,6 +158,7 @@ model Store {
   competitorDiscoveries CompetitorDiscovery[]
   nicheInsights         NicheInsight[]
   swotReports           SwotReport[]
+  productMatches        ProductMatch[]
 
   @@index([tenantId])
   @@map("stores")
@@ -221,6 +235,7 @@ model Product {
   store           Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   competitors     Competitor[]
   recommendations DecisionRecommendation[]
+  matches         ProductMatch[]
 
   @@unique([storeId, sallaProductId])
   @@index([tenantId])
@@ -255,6 +270,7 @@ model Competitor {
   product      Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
   priceHistory CompetitorPriceHistory[]
   discoveries  CompetitorDiscovery[]
+  matches      ProductMatch[]
 
   @@unique([storeId, domain, productUrl])
   @@index([tenantId])
@@ -409,6 +425,40 @@ model CompetitorDiscovery {
   @@index([tenantId])
   @@index([storeId, status, score(sort: Desc)])
   @@map("competitor_discoveries")
+}
+
+/// A product found in a competitor's store that looks like one of ours. Strong matches are linked
+/// by creating a Competitor listing (see `competitorId`); weaker ones wait here for the merchant.
+model ProductMatch {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @map("tenant_id") @db.Uuid
+  storeId        String             @map("store_id") @db.Uuid
+  productId      String             @map("product_id") @db.Uuid
+  /// Competitor domain the candidate was found on.
+  domain         String
+  candidateUrl   String             @map("candidate_url")
+  /// The name the competitor's own product page gives, shown so the merchant can judge the match.
+  candidateTitle String             @map("candidate_title")
+  candidatePrice Decimal?           @map("candidate_price") @db.Decimal(12, 2)
+  currency       String             @default("SAR") @db.VarChar(3)
+  /// 0-100 title similarity (see product-matching/title-matcher).
+  score          Int
+  status         ProductMatchStatus @default(SUGGESTED)
+  /// The tracked listing created when the match was linked or confirmed.
+  competitorId   String?            @map("competitor_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  competitor Competitor? @relation(fields: [competitorId], references: [id], onDelete: SetNull)
+
+  @@unique([storeId, productId, candidateUrl])
+  @@index([tenantId])
+  @@index([storeId, status, score(sort: Desc)])
+  @@index([productId])
+  @@map("product_matches")
 }
 
 /// How the store's catalogue splits across niches (derived from product names), and how many

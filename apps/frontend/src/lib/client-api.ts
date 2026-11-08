@@ -9,6 +9,8 @@ export type Outcome<T> =
       status: number;
       /** Merchant-safe reason from the backend, when it sent one (400 with a string message). */
       message?: string;
+      /** Machine-readable reason on a 409 (e.g. "scraper_disabled"), when the backend sent one. */
+      code?: string;
     };
 
 /** Reads a 400's `message` only when it is a string; zod validation errors are arrays and are ignored. */
@@ -17,6 +19,17 @@ async function merchantMessage(res: Response): Promise<string | undefined> {
   try {
     const body = (await res.json()) as { message?: unknown };
     return typeof body.message === 'string' ? body.message : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** A 409's fixed `code`, so the UI can tell "switched off" from "already running". */
+async function conflictCode(res: Response): Promise<string | undefined> {
+  if (res.status !== 409) return undefined;
+  try {
+    const body = (await res.json()) as { code?: unknown };
+    return typeof body.code === 'string' ? body.code.slice(0, 40) : undefined;
   } catch {
     return undefined;
   }
@@ -34,7 +47,14 @@ export async function send<T>(
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (!res.ok) return { ok: false, status: res.status, message: await merchantMessage(res) };
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        message: await merchantMessage(res.clone()),
+        code: await conflictCode(res),
+      };
+    }
     // 204 No Content (DELETE) has no body to parse.
     if (res.status === 204) return { ok: true, data: undefined as T };
     return { ok: true, data: (await res.json()) as T };

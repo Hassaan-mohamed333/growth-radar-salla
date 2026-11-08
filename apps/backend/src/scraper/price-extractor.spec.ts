@@ -1,4 +1,4 @@
-import { extractPrice, parsePrice } from './price-extractor';
+import { extractPrice, extractProductName, parsePrice } from './price-extractor';
 
 const page = (head: string) => `<html><head>${head}</head><body></body></html>`;
 
@@ -114,5 +114,28 @@ describe('extractPrice tag handling', () => {
   it('reads itemprop=price from a tag that is not the first one on the page', () => {
     const html = '<div class="a"></div><span itemprop="price" content="310.5"></span>';
     expect(extractPrice(html)).toEqual({ price: 310.5, currency: null, inStock: null });
+  });
+});
+
+describe('extractProductName', () => {
+  it('prefers the schema.org Product name, including inside @graph', () => {
+    const html = page(`<title>Shop | Home</title><script type="application/ld+json">${JSON.stringify({
+      '@graph': [{ '@type': 'WebSite', name: 'Shop' }, { '@type': 'Product', name: 'قهوة إثيوبية 500غ' }],
+    })}</script>`);
+    expect(extractProductName(html)).toBe('قهوة إثيوبية 500غ');
+  });
+
+  it('falls back to og:title, then <title>', () => {
+    expect(extractProductName(page('<meta property="og:title" content="Olive &amp; Oil 1L"><title>x</title>'))).toBe(
+      'Olive & Oil 1L',
+    );
+    expect(extractProductName(page('<title>  Plain   title </title>'))).toBe('Plain title');
+  });
+
+  it('returns null when the page names nothing, and ignores broken JSON-LD', () => {
+    expect(extractProductName(page(''))).toBeNull();
+    expect(extractProductName(page('<script type="application/ld+json">{oops</script><title>Fallback</title>'))).toBe(
+      'Fallback',
+    );
   });
 });

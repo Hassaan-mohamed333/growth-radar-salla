@@ -18,6 +18,7 @@ export type NavKey =
   | 'overview'
   | 'products'
   | 'competitors'
+  | 'matching'
   | 'insights'
   | 'recommendations'
   | 'confidence';
@@ -27,6 +28,7 @@ export const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
   { key: 'overview', label: 'نظرة عامة', href: '/' },
   { key: 'products', label: 'المنتجات', href: '/products' },
   { key: 'competitors', label: 'المنافسون', href: '/competitors' },
+  { key: 'matching', label: 'مقارنة المنتجات', href: '/product-matching' },
   { key: 'insights', label: 'تحليل النيتش والمنافسين', href: '/niche-insights' },
   { key: 'recommendations', label: 'التوصيات', href: '/recommendations' },
   { key: 'confidence', label: 'ثقة البيانات', href: '/data-confidence' },
