@@ -35,7 +35,7 @@ function setup() {
   const service = new CompetitorPriceScraperService(
     { competitor: { updateMany } } as unknown as PrismaService,
     { record } as unknown as CompetitorPricesService,
-    { fetchHtml } as unknown as PageFetcher,
+    { fetchProductHtml: fetchHtml } as unknown as PageFetcher,
     { get: () => 360 } as unknown as ConfigService<Env, true>,
     // Instant retries so tests don't wait.
     { attempts: 3, baseDelayMs: 0, maxDelayMs: 0, maxRetryAfterMs: 15_000, sleep: async () => {} },

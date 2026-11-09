@@ -78,6 +78,24 @@ export const envSchema = z.object({
     .string()
     .min(1)
     .default('GrowthRadarBot/1.0 (merchant price monitoring)'),
+  /**
+   * Optional last-resort tier: a rendering API for sites that need JavaScript or refuse plain
+   * requests. An https:// URL template containing `{url}`; the provider key goes inside it.
+   * Unset = tier disabled. Public competitor pages are sent to this provider.
+   */
+  SCRAPER_RENDER_API_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .refine(
+      (v) => v === undefined || (v.startsWith('https://') && v.includes('{url}')),
+      'must be an https:// URL containing {url}',
+    ),
+  /** Consecutive blocked fetches before a domain is paused. */
+  SCRAPER_BLOCK_THRESHOLD: z.coerce.number().int().min(1).max(20).default(3),
+  /** How long a paused domain is left alone. */
+  SCRAPER_BLOCK_COOLDOWN_MINUTES: z.coerce.number().int().min(1).max(1440).default(30),
 
   SALLA_CLIENT_ID: z.string().min(1),
   SALLA_CLIENT_SECRET: z.string().min(1),

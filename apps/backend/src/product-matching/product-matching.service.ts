@@ -414,7 +414,7 @@ export class ProductMatchingService {
 
       let html: string;
       try {
-        html = await this.fetcher.fetchHtml(c.url);
+        html = await this.fetcher.fetchProductHtml(c.url);
       } catch (err) {
         if (err instanceof ScrapeError) continue;
         throw err;

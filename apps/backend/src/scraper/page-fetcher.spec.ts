@@ -189,3 +189,35 @@ describe('parseRetryAfter', () => {
     expect(parseRetryAfter('soon')).toBeUndefined();
   });
 });
+
+describe('HttpPageFetcher.fetchJson', () => {
+  const json = (res: http.ServerResponse, body: string, status = 200, type = 'application/json') => {
+    res.writeHead(status, { 'content-type': type });
+    res.end(body);
+  };
+
+  it('parses a JSON response and asks for JSON', async () => {
+    let accept: string | undefined;
+    handler = (req, res) => {
+      accept = req.headers.accept;
+      json(res, '{"title":"x","price":9900}');
+    };
+    await expect(fetcher().fetchJson(`${origin}/products/x.js`)).resolves.toEqual({ title: 'x', price: 9900 });
+    expect(accept).toContain('application/json');
+  });
+
+  it('rejects an HTML answer (e.g. a block page served with 200)', async () => {
+    handler = (_req, res) => html(res, '<html>captcha</html>');
+    expect((await failureOf(fetcher().fetchJson(`${origin}/products/x.js`))).kind).toBe('not_html');
+  });
+
+  it('reports invalid JSON as parse_failed', async () => {
+    handler = (_req, res) => json(res, '{not json');
+    expect((await failureOf(fetcher().fetchJson(`${origin}/products/x.js`))).kind).toBe('parse_failed');
+  });
+
+  it('classifies a 403 as blocked, like HTML fetches', async () => {
+    handler = (_req, res) => json(res, '{}', 403);
+    expect((await failureOf(fetcher().fetchJson(`${origin}/products/x.js`))).kind).toBe('blocked');
+  });
+});

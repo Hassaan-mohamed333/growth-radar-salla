@@ -91,7 +91,7 @@ export class CompetitorPriceScraperService {
 
   private async fetchAndExtract(target: ScrapeTarget): Promise<ExtractedPrice> {
     parseCompetitorUrl(target.productUrl); // re-check: stored URLs predate rule changes
-    const html = await this.fetcher.fetchHtml(target.productUrl);
+    const html = await this.fetcher.fetchProductHtml(target.productUrl);
 
     const extracted = extractPrice(html);
     if (!extracted) throw new ScrapeError('parse_failed', 'No price found on the page');

@@ -9,7 +9,19 @@ import { type CompetitorUrlOptions, isPublicAddress, parseCompetitorUrl } from '
  * third-party scraping API can replace the plain HTTP implementation later. */
 export abstract class PageFetcher {
   abstract fetchHtml(url: string): Promise<string>;
+
+  /**
+   * HTML of a *product* page that the caller is going to price. Implementations may try harder
+   * than for an ordinary page (platform APIs, a rendering service). The default is a plain fetch,
+   * so simple fetchers and test fakes need not implement it.
+   */
+  fetchProductHtml(url: string): Promise<string> {
+    return this.fetchHtml(url);
+  }
 }
+
+/** What a fetch is expected to return; decides the Accept header and the content-type check. */
+type BodyKind = 'html' | 'json';
 
 export interface HttpPageFetcherOptions {
   userAgent: string;
@@ -57,12 +69,26 @@ export class HttpPageFetcher extends PageFetcher {
     this.maxRedirects = opts.maxRedirects ?? 3;
   }
 
-  async fetchHtml(rawUrl: string): Promise<string> {
+  fetchHtml(rawUrl: string): Promise<string> {
+    return this.fetchBody(rawUrl, 'html');
+  }
+
+  /** A public JSON endpoint (platform product APIs). Same guards as fetchHtml. */
+  async fetchJson(rawUrl: string): Promise<unknown> {
+    const text = await this.fetchBody(rawUrl, 'json');
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new ScrapeError('parse_failed', 'Response is not valid JSON');
+    }
+  }
+
+  private async fetchBody(rawUrl: string, kind: BodyKind): Promise<string> {
     const urlOptions: CompetitorUrlOptions = { allowNonStandardPorts: this.opts.allowNonStandardPorts };
     let url = parseCompetitorUrl(rawUrl, urlOptions);
 
     for (let hop = 0; hop <= this.maxRedirects; hop++) {
-      const res = await this.get(url);
+      const res = await this.get(url, kind);
 
       if (res.status >= 200 && res.status < 300) return res.body;
 
@@ -76,7 +102,7 @@ export class HttpPageFetcher extends PageFetcher {
     throw new ScrapeError('http_error', 'Too many redirects');
   }
 
-  private get(url: URL): Promise<RawResponse> {
+  private get(url: URL, kind: BodyKind): Promise<RawResponse> {
     const lib = url.protocol === 'https:' ? https : http;
 
     return new Promise<RawResponse>((resolve, reject) => {
@@ -95,7 +121,10 @@ export class HttpPageFetcher extends PageFetcher {
           lookup: this.guardedLookup,
           headers: {
             'user-agent': this.opts.userAgent,
-            accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
+            accept:
+              kind === 'json'
+                ? 'application/json,*/*;q=0.5'
+                : 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5',
             'accept-language': 'ar,en;q=0.8',
             'accept-encoding': 'identity',
           },
@@ -104,9 +133,10 @@ export class HttpPageFetcher extends PageFetcher {
           const status = res.statusCode ?? 0;
           const isOk = status >= 200 && status < 300;
 
-          if (isOk && !/text\/html|application\/xhtml\+xml/i.test(String(res.headers['content-type'] ?? ''))) {
+          const expected = kind === 'json' ? /json/i : /text\/html|application\/xhtml\+xml/i;
+          if (isOk && !expected.test(String(res.headers['content-type'] ?? ''))) {
             res.destroy();
-            return done(() => reject(new ScrapeError('not_html', 'Response is not HTML')));
+            return done(() => reject(new ScrapeError('not_html', `Response is not ${kind.toUpperCase()}`)));
           }
           if (!isOk) {
             res.resume(); // we only need status + headers
