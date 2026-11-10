@@ -12,6 +12,7 @@ import {
 } from '../lib/api';
 import { formatDate, money, nf, signedPct } from '../lib/format';
 import { AppShell, SignIn } from './app-shell';
+import { OnboardingCard } from './onboarding-card';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +43,10 @@ function confidenceLabel(c: number | null): string {
 
 export default async function DashboardPage() {
   const flags = { unauthorized: false };
-  const [status, summary] = await Promise.all([
+  const [status, summary, onboarding] = await Promise.all([
     settle(api.storeStatus(), flags),
     settle(api.analyticsSummary(), flags),
+    settle(api.onboarding(), flags),
   ]);
 
   if (flags.unauthorized) return <SignIn />;
@@ -62,6 +64,7 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      <OnboardingCard data={onboarding} />
       <ConnectionSection status={status} />
       {summary ? (
         <SummarySections summary={summary} />

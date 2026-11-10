@@ -430,8 +430,34 @@ export async function settle<T>(p: Promise<T>, flags: { unauthorized: boolean })
   }
 }
 
+export interface OnboardingHeadline {
+  comparedProducts: number;
+  higherProducts: number;
+  lowerProducts: number;
+  samePriceProducts: number;
+  /** Average % we are above the cheapest competitor, over the products where we are higher. */
+  avgHigherPct: number | null;
+  competitorsCompared: number;
+}
+
+export type OnboardingNext = 'sync' | 'find_competitors' | 'compare' | 'done';
+
+export interface Onboarding {
+  next: OnboardingNext;
+  steps: {
+    connected: boolean;
+    productsSynced: boolean;
+    competitorsAdded: boolean;
+    pricesCompared: boolean;
+  };
+  counts: { products: number; competitors: number };
+  headline: OnboardingHeadline | null;
+  searchTargets: Array<{ id: string; name: string }>;
+}
+
 export const api = {
   storeStatus: () => get<StoreStatus>('/api/v1/store/status'),
+  onboarding: () => get<Onboarding>('/api/v1/onboarding'),
   analyticsSummary: () => get<AnalyticsSummary>('/api/v1/analytics/summary'),
   dataConfidence: (q: DataConfidenceQuery = {}) => {
     const params = new URLSearchParams();
