@@ -99,19 +99,23 @@ function NextAction({ data }: { data: Onboarding }) {
 
   if (data.next === 'find_competitors') {
     return (
-      <Card title="أضف منافسيك">
-        <p>
-          لديك {nf.format(data.counts.products)} منتجات. نحتاج متاجر منافسة لنقارن أسعارك بها. اكتشف المنافسين في مجالك
-          أو أضفهم يدويًا.
+      <Card title="اكتشف منافسيك وقارن أسعارك">
+        <p className="mb-4">
+          لديك {nf.format(data.counts.products)} منتجات. سنختار لك أقرب المتاجر المنافسة في مجالك (يمكنك حذف أي منها
+          لاحقًا) ثم نقارن أسعار أغلى منتجاتك بها.
         </p>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <Link href="/niche-insights" className="rounded-lg bg-brand-dark px-4 py-2 font-medium text-white hover:bg-brand-darkest">
-            اكتشف المنافسين
-          </Link>
-          <Link href="/competitors" className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium hover:bg-slate-50">
+        <StartComparison targets={[]} discover />
+        <p className="mt-4 text-xs text-slate-500">
+          تفضّل اختيار المنافسين بنفسك؟{' '}
+          <Link href="/niche-insights" className="text-brand-dark underline">
+            تصفّح الاقتراحات
+          </Link>{' '}
+          أو{' '}
+          <Link href="/competitors" className="text-brand-dark underline">
             أضفهم يدويًا
           </Link>
-        </div>
+          .
+        </p>
       </Card>
     );
   }

@@ -2,6 +2,8 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { AddressInfo } from 'node:net';
+import { CompetitorsService } from '../../src/competitors/competitors.service';
+import { CompetitorInsightsService } from '../../src/competitor-insights/competitor-insights.service';
 import { OnboardingController } from '../../src/onboarding/onboarding.controller';
 import { OnboardingService } from '../../src/onboarding/onboarding.service';
 import { PrismaModule } from '../../src/prisma/prisma.module';
@@ -36,7 +38,7 @@ describe('Onboarding summary over HTTP against real PostgreSQL', () => {
         SessionModule,
       ],
       controllers: [OnboardingController],
-      providers: [OnboardingService],
+      providers: [OnboardingService, CompetitorInsightsService, CompetitorsService],
     }).compile();
 
     app = moduleRef.createNestApplication();
@@ -61,6 +63,17 @@ describe('Onboarding summary over HTTP against real PostgreSQL', () => {
       ? `${SESSION_COOKIE}=${encodeURIComponent(sessions.issue({ tenantId: as.tenantId, storeId: as.storeId }))}`
       : undefined;
     const res = await fetch(`${base}/api/v1/onboarding`, { headers: cookie ? { cookie } : {} });
+    return { status: res.status, json: (await res.json().catch(() => null)) as any };
+  }
+
+  async function start(as?: SeededStore) {
+    const cookie = as
+      ? `${SESSION_COOKIE}=${encodeURIComponent(sessions.issue({ tenantId: as.tenantId, storeId: as.storeId }))}`
+      : undefined;
+    const res = await fetch(`${base}/api/v1/onboarding/start`, {
+      method: 'POST',
+      headers: cookie ? { cookie } : {},
+    });
     return { status: res.status, json: (await res.json().catch(() => null)) as any };
   }
 
@@ -127,5 +140,60 @@ describe('Onboarding summary over HTTP against real PostgreSQL', () => {
     expect(res.json.headline).toBeNull();
     expect(res.json.counts).toEqual({ products: 1, competitors: 0 });
     expect(res.json.searchTargets).toEqual([{ id: mine.id, name: expect.any(String) }]);
+  });
+
+  describe('POST /start', () => {
+    const seedNiche = async (s: SeededStore) => {
+      for (const name of ['قهوة إثيوبية', 'عسل سدر', 'تمر سكري', 'عطر عود']) {
+        await seedProduct(prisma, s, { name, price: 100, costPrice: 40 });
+      }
+    };
+
+    it('requires a session', async () => {
+      expect((await start()).status).toBe(401);
+    });
+
+    it('does nothing for a store without products', async () => {
+      const res = await start(a);
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ next: 'sync', discovered: 0 });
+      expect(await prisma.competitor.count({ where: { storeId: a.storeId } })).toBe(0);
+    });
+
+    it('discovers and adds up to three competitors, then asks to compare', async () => {
+      await seedNiche(a);
+
+      const res = await start(a);
+
+      expect(res.status).toBe(200);
+      expect(res.json.discovered).toBeGreaterThan(0);
+      expect(res.json.discovered).toBeLessThanOrEqual(3);
+      expect(res.json.counts.competitors).toBe(res.json.discovered);
+      expect(res.json.next).toBe('compare');
+      expect(await prisma.competitor.count({ where: { storeId: a.storeId, isActive: true } })).toBe(res.json.discovered);
+    });
+
+    it('is idempotent: with competitors already tracked it adds nothing', async () => {
+      await seedNiche(a);
+      const first = await start(a);
+      const second = await start(a);
+
+      expect(second.json.discovered).toBe(0);
+      expect(second.json.counts.competitors).toBe(first.json.counts.competitors);
+    });
+
+    it('leaves a store that already tracks someone alone', async () => {
+      await seedNiche(a);
+      await seedCompetitor(prisma, a, { productUrl: null });
+      const res = await start(a);
+      expect(res.json.discovered).toBe(0);
+      expect(res.json.counts.competitors).toBe(1);
+    });
+
+    it('never touches another store', async () => {
+      await seedNiche(a);
+      await start(a);
+      expect(await prisma.competitor.count({ where: { storeId: b.storeId } })).toBe(0);
+    });
   });
 });

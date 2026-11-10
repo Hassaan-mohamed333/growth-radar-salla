@@ -8,5 +8,6 @@ import { CompetitorInsightsService } from './competitor-insights.service';
   imports: [SessionModule, CompetitorsModule],
   controllers: [CompetitorInsightsController],
   providers: [CompetitorInsightsService],
+  exports: [CompetitorInsightsService],
 })
 export class CompetitorInsightsModule {}

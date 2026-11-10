@@ -14,6 +14,12 @@ interface Target {
   name: string;
 }
 
+interface StartResponse {
+  discovered: number;
+  counts: { products: number; competitors: number };
+  searchTargets: Target[];
+}
+
 interface SearchResponse {
   outcomes: Array<{ outcome: string }>;
 }
@@ -29,23 +35,56 @@ const progressLabel: Record<Progress, string> = {
   failed: 'تعذّر البحث',
 };
 
-export function StartComparison({ targets }: { targets: Target[] }) {
+export function StartComparison({ targets, discover = false }: { targets: Target[]; discover?: boolean }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<'discovering' | 'comparing'>('comparing');
   const [progress, setProgress] = useState<Record<string, Progress>>({});
+  const [picked, setPicked] = useState<Target[]>([]);
   const inFlight = useRef(false);
-  const picked = targets.slice(0, MAX_PRODUCTS);
 
   async function run() {
-    if (inFlight.current || picked.length === 0) return;
+    if (inFlight.current || (!discover && targets.length === 0)) return;
     inFlight.current = true;
     setBusy(true);
-    setProgress(Object.fromEntries(picked.map((t) => [t.id, 'searching' as Progress])));
+
+    let list = targets;
+    if (discover) {
+      setPhase('discovering');
+      const started = await send<StartResponse>('POST', '/api/v1/onboarding/start');
+      if (!started.ok) {
+        inFlight.current = false;
+        setBusy(false);
+        toast.error(
+          started.status === 409 ? 'الإعداد جارٍ بالفعل. انتظر حتى ينتهي.' : failureMessage(started.status, started.message),
+        );
+        return;
+      }
+      if (started.data.counts.competitors === 0) {
+        inFlight.current = false;
+        setBusy(false);
+        toast.info('لم نجد منافسين مناسبين لمجال متجرك. أضفهم يدويًا من صفحة المنافسين.');
+        router.refresh();
+        return;
+      }
+      list = started.data.searchTargets;
+    }
+    setPhase('comparing');
+
+    const batch = list.slice(0, MAX_PRODUCTS);
+    if (batch.length === 0) {
+      inFlight.current = false;
+      setBusy(false);
+      router.refresh();
+      return;
+    }
+    setPicked(batch);
+    setProgress(Object.fromEntries(batch.map((t) => [t.id, 'searching' as Progress])));
 
     let problem: string | null = null;
     await Promise.all(
-      picked.map(async (t) => {
+      batch.map(async (t) => {
         const res = await send<SearchResponse>('POST', `/api/v1/product-matching/products/${t.id}/search`);
         let state: Progress;
         if (res.ok) {
@@ -77,11 +116,17 @@ export function StartComparison({ targets }: { targets: Target[] }) {
       <button
         type="button"
         onClick={() => void run()}
-        disabled={busy || picked.length === 0}
+        disabled={busy || (!discover && targets.length === 0)}
         aria-busy={busy}
         className="self-start rounded-lg bg-brand-dark px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-darkest disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {busy ? 'نقارن أسعارك مع المنافسين…' : 'قارن أسعاري الآن'}
+        {busy
+          ? phase === 'discovering'
+            ? 'نكتشف منافسيك…'
+            : 'نقارن أسعارك مع المنافسين…'
+          : discover
+            ? 'اكتشف منافسيّ وقارن أسعاري'
+            : 'قارن أسعاري الآن'}
       </button>
 
       {busy && (
