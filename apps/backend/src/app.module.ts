@@ -8,6 +8,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { CompetitorInsightsModule } from './competitor-insights/competitor-insights.module';
 import { CompetitorsModule } from './competitors/competitors.module';
 import { DataConfidenceModule } from './data-confidence/data-confidence.module';
+import { HealthModule } from './health/health.module';
 import { ProductMatchingModule } from './product-matching/product-matching.module';
 import { StoreModule } from './store/store.module';
 import { SecurityModule } from './security/security.module';
@@ -50,6 +51,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     ProductMatchingModule,
     ScraperModule,
     RecommendationsModule,
+    HealthModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: SessionThrottlerGuard }],
 })

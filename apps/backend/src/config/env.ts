@@ -92,6 +92,13 @@ export const envSchema = z.object({
       (v) => v === undefined || (v.startsWith('https://') && v.includes('{url}')),
       'must be an https:// URL containing {url}',
     ),
+  /** Error reporting (Sentry). Unset = off. */
+  SENTRY_DSN: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .refine((v) => v === undefined || v.startsWith('https://'), 'must be an https:// DSN'),
   /** Consecutive blocked fetches before a domain is paused. */
   SCRAPER_BLOCK_THRESHOLD: z.coerce.number().int().min(1).max(20).default(3),
   /** How long a paused domain is left alone. */
