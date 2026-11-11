@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { URL_REJECTION_TEXT } from '../scraper/url-guard';
 import { Prisma } from '@growth-radar/database';
 import type { PrismaService } from '../prisma/prisma.service';
-import { CompetitorsService } from './competitors.service';
+import { CompetitorsService, HOMEPAGE_URL_TEXT } from './competitors.service';
 
 const ctx = { tenantId: 'tenant-1', storeId: 'store-1' };
 
@@ -62,12 +62,48 @@ describe('CompetitorsService.create', () => {
   });
 
   it('accepts a store-level competitor with only a domain', async () => {
-    const { service, create } = setup();
+    const { service, create } = setup({ existing: null });
     await service.create(ctx, { name: 'Rival', domain: 'Rival.example.com' });
     expect(create.mock.calls[0]![0].data).toMatchObject({
       domain: 'rival.example.com',
       productUrl: null,
     });
+  });
+
+  it('refuses a second store-level entry for the same site', async () => {
+    const { service, create, prisma } = setup({ existing: { id: 'already' } });
+    await expect(service.create(ctx, { name: 'Rival', domain: 'rival.example.com' })).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(prisma.competitor.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { storeId: 'store-1', domain: 'rival.example.com', productUrl: null } }),
+    );
+  });
+
+  it.each([
+    'https://rival.example.com',
+    'https://rival.example.com/',
+    'https://rival.example.com/ar',
+    'https://rival.example.com/ar/',
+    'https://rival.example.com/en-sa',
+  ])('refuses the front page %s as a product page, in fixed text', async (url) => {
+    const { service, create } = setup();
+    const err = await service.create(ctx, { name: 'Rival', productUrl: url }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe(HOMEPAGE_URL_TEXT);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'https://rival.example.com/p123456',
+    'https://rival.example.com/ar/some-product/p1004407177',
+    'https://rival.example.com/products/x',
+    'https://rival.example.com/?p=123',
+  ])('accepts %s as a product page', async (url) => {
+    const { service, create } = setup();
+    await service.create(ctx, { name: 'Rival', productUrl: url });
+    expect(create).toHaveBeenCalled();
   });
 
   it('rejects internal URLs without echoing them', async () => {

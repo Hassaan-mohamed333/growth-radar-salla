@@ -91,7 +91,7 @@ export function failureMessage(status: number, serverMessage?: string): string {
     case 404:
       return 'العنصر غير موجود.';
     case 409:
-      return 'هذا المنافس مضاف مسبقًا لنفس الصفحة.';
+      return 'هذا المنافس مضاف مسبقًا.';
     default:
       return 'تعذّر تنفيذ العملية. حاول مرة أخرى.';
   }

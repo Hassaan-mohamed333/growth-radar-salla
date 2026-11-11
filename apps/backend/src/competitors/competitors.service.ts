@@ -127,6 +127,16 @@ export class CompetitorsService {
     const listing = resolveListing(input.productUrl, input.domain);
     if (input.productId) await this.requireProduct(ctx.storeId, input.productId);
 
+    // The unique index cannot catch a repeated site-level competitor (NULL page URLs are distinct
+    // in PostgreSQL), so a repeat is refused here.
+    if (listing.productUrl === null) {
+      const same = await this.prisma.competitor.findFirst({
+        where: { storeId: ctx.storeId, domain: listing.domain, productUrl: null },
+        select: { id: true },
+      });
+      if (same) throw new ConflictException('هذا المنافس مضاف بالفعل.');
+    }
+
     return this.insert({
       ...ctx,
       productId: input.productId ?? null,
@@ -237,6 +247,21 @@ export class CompetitorsService {
   }
 }
 
+export const HOMEPAGE_URL_TEXT =
+  'هذا رابط الصفحة الرئيسية للموقع وليس صفحة منتج. افتح صفحة المنتج عند المنافس وانسخ رابطها، أو أدخل النطاق فقط.';
+
+/**
+ * A site's front page ("/", or only a language segment such as "/ar") never carries one product's
+ * price, so tracking it can only ever fail with "price not found". A query string is allowed
+ * through: some sites address products as "/?p=123".
+ */
+export function isHomepageUrl(url: URL): boolean {
+  if (url.search !== '') return false;
+  const segments = url.pathname.split('/').filter(Boolean);
+  if (segments.length === 0) return true;
+  return segments.length === 1 && /^[a-z]{2}([-_][a-z]{2,4})?$/i.test(segments[0]!);
+}
+
 /** Validates the page URL / domain and derives the normalised stored values. */
 function resolveListing(
   productUrl: string | undefined,
@@ -245,6 +270,7 @@ function resolveListing(
   try {
     if (productUrl) {
       const url = parseCompetitorUrl(productUrl);
+      if (isHomepageUrl(url)) throw new BadRequestException(HOMEPAGE_URL_TEXT);
       const derived = domainOf(url);
       if (domain && domainOf(parseCompetitorUrl(`https://${domain}`)) !== derived) {
         throw new BadRequestException('النطاق المدخل لا يطابق رابط الصفحة.');
