@@ -2,7 +2,7 @@
 // RTL: only logical utilities (ms/me/ps/pe/start/end, text-start) so the layout mirrors with dir="rtl".
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import {
   api,
   settle,
@@ -41,7 +41,7 @@ const connectionBadge: Record<ConnectionState, { label: string; dot: string; pil
   disconnected: { label: 'غير متصل', dot: 'bg-red-500', pill: 'bg-red-50 text-red-700' },
 };
 
-export async function AppShell({
+export function AppShell({
   active,
   title,
   status,
@@ -53,11 +53,6 @@ export async function AppShell({
   children: ReactNode;
 }) {
   const badge = connectionBadge[status?.status ?? 'disconnected'];
-  // One-row request: only the total is needed. A failure just hides the count.
-  const pending = await settle(api.recommendations({ status: 'PENDING', pageSize: 1 }), {
-    unauthorized: false,
-  });
-  const pendingCount = pending?.total ?? 0;
 
   return (
     <div className="flex min-h-screen bg-slate-50">
@@ -81,10 +76,10 @@ export async function AppShell({
                     }`}
                   >
                     {item.label}
-                    {item.key === 'recommendations' && pendingCount > 0 && (
-                      <span className="rounded-full bg-brand-dark px-2 py-0.5 text-xs font-bold tabular-nums text-white">
-                        {nf.format(pendingCount)}
-                      </span>
+                    {item.key === 'recommendations' && (
+                      <Suspense fallback={null}>
+                        <PendingBadge />
+                      </Suspense>
                     )}
                   </Link>
                 ) : (
@@ -125,6 +120,24 @@ export async function AppShell({
         <main className="flex-1 space-y-8 p-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+/**
+ * Pending-recommendations count. Rendered inside Suspense so the page never waits for it: it is a
+ * second backend round trip that used to run after the page's own data, doubling every navigation.
+ * A failure just hides the count.
+ */
+async function PendingBadge() {
+  const pending = await settle(api.recommendations({ status: 'PENDING', pageSize: 1 }), {
+    unauthorized: false,
+  });
+  const count = pending?.total ?? 0;
+  if (count <= 0) return null;
+  return (
+    <span className="rounded-full bg-brand-dark px-2 py-0.5 text-xs font-bold tabular-nums text-white">
+      {nf.format(count)}
+    </span>
   );
 }
 
