@@ -21,12 +21,14 @@ export type NavKey =
   | 'matching'
   | 'insights'
   | 'recommendations'
-  | 'confidence';
+  | 'confidence'
+  | 'health';
 
 /** Entries without `href` are planned sections and render as inert text, not dead links. */
 export const nav: Array<{ key?: NavKey; label: string; href?: string }> = [
   { key: 'overview', label: 'نظرة عامة', href: '/' },
   { key: 'products', label: 'المنتجات', href: '/products' },
+  { key: 'health', label: 'صحة المتجر', href: '/store-health' },
   { key: 'competitors', label: 'المنافسون', href: '/competitors' },
   { key: 'matching', label: 'مقارنة المنتجات', href: '/product-matching' },
   { key: 'insights', label: 'تحليل النيتش والمنافسين', href: '/niche-insights' },

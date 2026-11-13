@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, localToday } from '../sync/sales-aggregation';
+import { computeStoreHealth, type StoreHealth } from './store-health';
 
 export interface AnalyticsSummaryResponse {
   generatedAt: string;
@@ -86,6 +87,44 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Margins, stock and discount findings from the merchant's own catalogue. */
+  async getStoreHealth(
+    storeId: string,
+  ): Promise<{ currency: string; lastSyncedAt: string | null; health: StoreHealth }> {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { currency: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+
+    const rows = await this.prisma.product.findMany({
+      where: { storeId, status: { not: 'DELETED' } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        price: true,
+        salePrice: true,
+        costPrice: true,
+        quantity: true,
+        syncedAt: true,
+      },
+    });
+    const lastSynced = rows.reduce<Date | null>(
+      (m, r) => (r.syncedAt && (!m || r.syncedAt > m) ? r.syncedAt : m),
+      null,
+    );
+    const health = computeStoreHealth(
+      rows.map((r) => ({
+        ...r,
+        price: r.price.toNumber(),
+        salePrice: r.salePrice?.toNumber() ?? null,
+        costPrice: r.costPrice?.toNumber() ?? null,
+      })),
+    );
+    return { currency: store.currency, lastSyncedAt: lastSynced?.toISOString() ?? null, health };
+  }
 
   /** @param storeId the authenticated merchant's store (from the session, never the request) */
   async getSummary(storeId: string): Promise<AnalyticsSummaryResponse> {

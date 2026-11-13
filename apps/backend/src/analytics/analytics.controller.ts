@@ -8,6 +8,11 @@ import { AnalyticsService, type AnalyticsSummaryResponse } from './analytics.ser
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
 
+  @Get('store-health')
+  storeHealth(@CurrentSession() session: SessionContext) {
+    return this.analytics.getStoreHealth(session.storeId);
+  }
+
   @Get('summary')
   summary(@CurrentSession() session: SessionContext): Promise<AnalyticsSummaryResponse> {
     return this.analytics.getSummary(session.storeId);

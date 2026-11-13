@@ -459,6 +459,7 @@ export const api = {
   storeStatus: () => get<StoreStatus>('/api/v1/store/status'),
   onboarding: () => get<Onboarding>('/api/v1/onboarding'),
   analyticsSummary: () => get<AnalyticsSummary>('/api/v1/analytics/summary'),
+  storeHealth: () => get<StoreHealth>('/api/v1/analytics/store-health'),
   dataConfidence: (q: DataConfidenceQuery = {}) => {
     const params = new URLSearchParams();
     if (q.status) params.set('status', q.status);
@@ -503,3 +504,42 @@ export const api = {
     return get<ProductList>(`/api/v1/products${qs ? `?${qs}` : ''}`);
   },
 };
+
+export interface StoreHealthRef {
+  id: string;
+  name: string;
+}
+export interface StoreHealthMarginRow extends StoreHealthRef {
+  sellingPrice: number;
+  costPrice: number;
+  marginPct: number;
+}
+export interface StoreHealth {
+  currency: string;
+  /** Newest product sync time; null before the first sync. */
+  lastSyncedAt: string | null;
+  health: {
+    totalProducts: number;
+    stock: {
+      outOfStock: number;
+      lowStock: number;
+      lowStockThreshold: number;
+      hidden: number;
+      outOfStockItems: StoreHealthRef[];
+      lowStockItems: Array<StoreHealthRef & { quantity: number }>;
+    };
+    margins: {
+      withCost: number;
+      missingCost: number;
+      avgMarginPct: number | null;
+      belowCost: StoreHealthMarginRow[];
+      thinnest: StoreHealthMarginRow[];
+    };
+    discounts: {
+      onSale: number;
+      avgDiscountPct: number | null;
+      deepest: Array<StoreHealthRef & { discountPct: number }>;
+    };
+    inventory: { costValue: number | null; retailValue: number | null; productsCounted: number };
+  };
+}
