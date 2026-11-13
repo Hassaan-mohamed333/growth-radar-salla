@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SALLA_LOGIN_URL, api, settle, type ProductItem, type ProductList } from '../../lib/api';
 import { money, nf } from '../../lib/format';
 import { AppShell, SignIn } from '../app-shell';
+import { FindAtCompetitors } from '../find-at-competitors';
 
 export const dynamic = 'force-dynamic';
 
@@ -239,6 +240,7 @@ function ProductRow({ product: p }: { product: ProductItem }) {
       <td className="max-w-xs px-4 py-3">
         <p className="truncate font-medium">{p.name}</p>
         {p.sku && <p className="truncate text-xs text-slate-500">{p.sku}</p>}
+        <FindAtCompetitors productName={p.name} />
       </td>
       <td className="px-4 py-3 tabular-nums">
         {p.salePrice ? (

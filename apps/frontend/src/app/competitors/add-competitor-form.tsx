@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { failureMessage, getJson, send } from '../../lib/client-api';
 import { checkCompetitorUrl } from '../../lib/url-guard';
+import { FindAtCompetitors } from '../find-at-competitors';
 import { useToast } from '../toast';
 
 interface ProductHit {
@@ -113,7 +114,9 @@ export function AddCompetitorForm({
     <form
       onSubmit={submit}
       noValidate
-      className={bare ? 'space-y-4 p-6' : 'space-y-4 rounded-xl border border-slate-200 bg-white p-5'}
+      className={
+        bare ? 'space-y-4 p-6' : 'space-y-4 rounded-xl border border-slate-200 bg-white p-5'
+      }
       aria-labelledby="add-heading"
     >
       <h2 id="add-heading" className="text-base font-bold">
@@ -173,19 +176,22 @@ export function AddCompetitorForm({
             المنتج المقابل في متجرك (اختياري)
           </label>
           {product ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-brand-main bg-brand-lightest px-3 py-2 text-sm">
-              <span className="truncate">{product.name}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setProduct(null);
-                  setQuery('');
-                }}
-                className="shrink-0 text-xs text-slate-600 underline"
-              >
-                تغيير
-              </button>
-            </div>
+            <>
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-brand-main bg-brand-lightest px-3 py-2 text-sm">
+                <span className="truncate">{product.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProduct(null);
+                    setQuery('');
+                  }}
+                  className="shrink-0 text-xs text-slate-600 underline"
+                >
+                  تغيير
+                </button>
+              </div>
+              <FindAtCompetitors productName={product.name} />
+            </>
           ) : (
             <>
               <input
