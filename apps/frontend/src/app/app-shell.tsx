@@ -141,12 +141,27 @@ async function PendingBadge() {
   );
 }
 
-export function SignIn() {
+/**
+ * Why the last Salla login failed, keyed by the backend's fixed `auth_error` codes. Unknown codes
+ * get the generic text, so nothing from the URL is ever echoed onto the page.
+ */
+const AUTH_ERROR_TEXT: Record<string, string> = {
+  invalid_state: 'انتهت مهلة تسجيل الدخول أو فُتح من نافذة أخرى. حاول مرة أخرى.',
+  exchange_failed: 'لم يكتمل الربط مع سلة (قد تكون رفضت الصلاحيات). حاول مرة أخرى.',
+};
+
+export function SignIn({ authError }: { authError?: string | null } = {}) {
+  const errorText = authError ? (AUTH_ERROR_TEXT[authError] ?? 'تعذّر تسجيل الدخول. حاول مرة أخرى.') : null;
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 text-center">
         <BrandLogoFull size={176} />
         <h1 className="sr-only">راصد</h1>
+        {errorText && (
+          <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {errorText}
+          </p>
+        )}
         <p className="mt-3 text-sm text-slate-600">سجّل الدخول عبر متجرك في سلة للوصول إلى لوحة التحكم.</p>
         <a
           href={SALLA_LOGIN_URL}

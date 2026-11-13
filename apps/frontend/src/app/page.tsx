@@ -41,15 +41,22 @@ function confidenceLabel(c: number | null): string {
   return `ثقة منخفضة · ${nf.format(c)}%`;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const flags = { unauthorized: false };
-  const [status, summary, onboarding] = await Promise.all([
+  const [status, summary, onboarding, sp] = await Promise.all([
     settle(api.storeStatus(), flags),
     settle(api.analyticsSummary(), flags),
     settle(api.onboarding(), flags),
+    searchParams,
   ]);
 
-  if (flags.unauthorized) return <SignIn />;
+  // A failed Salla login comes back here as /?auth_error=<code> (fixed codes from the backend).
+  const authError = typeof sp.auth_error === 'string' ? sp.auth_error : null;
+  if (flags.unauthorized) return <SignIn authError={authError} />;
 
   const backendDown = status === null;
 
