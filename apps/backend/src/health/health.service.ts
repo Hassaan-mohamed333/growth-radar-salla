@@ -6,13 +6,17 @@ import { REDIS } from '../redis/redis.module';
 export interface HealthReport {
   status: 'ok' | 'down';
   checks: { database: 'up' | 'down'; redis: 'up' | 'down' };
+  /** Which deployment answered: the host platform's service name and short commit. */
+  instance: { service: string | null; commit: string | null };
 }
 
 const CHECK_TIMEOUT_MS = 3_000;
 
 /**
  * Liveness for uptime monitors and load balancers: can we reach PostgreSQL and Redis right now.
- * Public by design, so it reports only up/down per dependency, never versions, hosts or errors.
+ * Public by design, so it reports up/down per dependency and which deployment answered (service
+ * name and short commit, so a cut-over between two backends can be verified), never hosts,
+ * credentials or error details.
  */
 @Injectable()
 export class HealthService {
@@ -28,7 +32,16 @@ export class HealthService {
       this.probe('database', () => this.prisma.$queryRaw`SELECT 1`),
       this.probe('redis', () => this.redis.ping()),
     ]);
-    return { status: database === 'up' && redis === 'up' ? 'ok' : 'down', checks: { database, redis } };
+    return {
+      status: database === 'up' && redis === 'up' ? 'ok' : 'down',
+      checks: { database, redis },
+      instance: {
+        // Render sets both; absent elsewhere (local runs, tests). Not secrets: the service name is
+        // already in its public hostname and the commit is public in the repository.
+        service: process.env.RENDER_SERVICE_NAME ?? null,
+        commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? null,
+      },
+    };
   }
 
   private async probe(name: string, fn: () => PromiseLike<unknown>): Promise<'up' | 'down'> {

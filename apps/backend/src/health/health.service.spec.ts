@@ -13,7 +13,7 @@ function setup(opts: { db?: () => Promise<unknown>; redis?: () => Promise<unknow
 describe('HealthService', () => {
   it('is ok when PostgreSQL and Redis answer', async () => {
     const { service } = setup();
-    await expect(service.check()).resolves.toEqual({
+    await expect(service.check()).resolves.toMatchObject({
       status: 'ok',
       checks: { database: 'up', redis: 'up' },
     });
@@ -21,7 +21,7 @@ describe('HealthService', () => {
 
   it('reports which dependency is down', async () => {
     const { service } = setup({ redis: async () => Promise.reject(new Error('ECONNREFUSED redis://secret@host')) });
-    await expect(service.check()).resolves.toEqual({
+    await expect(service.check()).resolves.toMatchObject({
       status: 'down',
       checks: { database: 'up', redis: 'down' },
     });
@@ -37,6 +37,30 @@ describe('HealthService', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('HealthService instance', () => {
+  const saved = { service: process.env.RENDER_SERVICE_NAME, commit: process.env.RENDER_GIT_COMMIT };
+  afterEach(() => {
+    for (const [k, v] of [['RENDER_SERVICE_NAME', saved.service], ['RENDER_GIT_COMMIT', saved.commit]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it('names the service and short commit that answered', async () => {
+    process.env.RENDER_SERVICE_NAME = 'growth-radar-api';
+    process.env.RENDER_GIT_COMMIT = '23e458ec4a7b1d9f0000000000000000deadbeef';
+    const { service } = setup();
+    await expect(service.check()).resolves.toMatchObject({ instance: { service: 'growth-radar-api', commit: '23e458e' } });
+  });
+
+  it('reports nulls outside Render', async () => {
+    delete process.env.RENDER_SERVICE_NAME;
+    delete process.env.RENDER_GIT_COMMIT;
+    const { service } = setup();
+    await expect(service.check()).resolves.toMatchObject({ instance: { service: null, commit: null } });
   });
 });
 
