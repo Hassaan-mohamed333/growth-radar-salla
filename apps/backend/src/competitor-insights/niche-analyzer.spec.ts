@@ -35,6 +35,21 @@ describe('classify', () => {
     expect(classify('البن السعودي')).toEqual(['coffee_food']); // with the definite article
   });
 
+  it('recognises body and bath care from a real perfume store catalogue', () => {
+    // Names taken from a live Salla perfume/body-care store, where discovery first found nothing.
+    for (const name of [
+      'زبدة جسم راسبري الفاخرة 200 مل',
+      'غسول شعر وجسم 2 في 1 راسبري 500 مل',
+      'جل مساج لونجر لوفرس بنكهة الراسبري 100 مل',
+      'طلاء أظافر زيماك 12',
+      'عرض راسبري صابونة بليفة , لوشن صغير (خصم 30%)',
+    ]) {
+      expect(classify(name)).toContain('beauty_health');
+    }
+    expect(classify('هدية معطر جسم ولوشن بلوميريا')).toEqual(expect.arrayContaining(['perfumes', 'beauty_health']));
+    expect(classify('عطور شرقية فاخرة')).toContain('perfumes');
+  });
+
   it('returns nothing for names it does not recognise', () => {
     expect(classify('منتج رقم 123')).toEqual([]);
     expect(classify('')).toEqual([]);

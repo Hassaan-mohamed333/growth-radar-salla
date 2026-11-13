@@ -43,12 +43,22 @@ export const NICHES: readonly NicheDefinition[] = [
   {
     key: 'beauty_health',
     label: 'الجمال والعناية والصحة',
-    keywords: ['كريم', 'مكياج', 'ماسكارا', 'احمر شفاه', 'شامبو', 'سيروم', 'عناية', 'فيتامين', 'مكمل', 'مرطب', 'cream', 'makeup', 'serum', 'shampoo', 'vitamin', 'skincare', 'lipstick'],
+    keywords: [
+      'كريم', 'مكياج', 'ماسكارا', 'احمر شفاه', 'شامبو', 'سيروم', 'عناية', 'فيتامين', 'مكمل', 'مرطب',
+      // Body and bath care: common in perfume/beauty stores, found missing on a real catalogue.
+      'لوشن', 'زبدة جسم', 'زبده جسم', 'غسول', 'صابون', 'صابونه', 'بلسم', 'مقشر', 'جل استحمام', 'زيت جسم',
+      'مزيل عرق', 'جل مساج', 'طلاء اظافر', 'مناكير',
+      'cream', 'makeup', 'serum', 'shampoo', 'vitamin', 'skincare', 'lipstick', 'lotion', 'body butter',
+      'body wash', 'soap', 'scrub', 'deodorant', 'nail polish',
+    ],
   },
   {
     key: 'perfumes',
     label: 'العطور والعود',
-    keywords: ['عطر', 'عود', 'بخور', 'دهن عود', 'مسك', 'perfume', 'oud', 'fragrance', 'bakhoor'],
+    keywords: [
+      'عطر', 'عطور', 'عود', 'بخور', 'دهن عود', 'مسك', 'معطر جسم', 'بخاخ جسم', 'سبلاش', 'بودي مست',
+      'perfume', 'oud', 'fragrance', 'bakhoor', 'body mist', 'body splash',
+    ],
   },
   {
     key: 'home_kitchen',
