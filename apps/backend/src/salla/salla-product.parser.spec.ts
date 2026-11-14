@@ -24,6 +24,8 @@ describe('parseSallaProduct', () => {
       costPrice: null,
       currency: 'SAR',
       quantity: 12,
+      soldQuantity: null,
+      views: null,
       statusSlug: 'sale',
       url: 'https://store.example/p/1001',
       imageUrl: 'https://cdn.example/1001.jpg',
@@ -208,5 +210,22 @@ describe('SallaApiClient pagination is never silently truncated', () => {
     });
     expect(orders.map((o) => o.id)).toEqual(['1', '2']);
     expect(f).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('parseSallaProduct sales counters', () => {
+  const base = { id: 1, name: 'عطر', price: { amount: 100, currency: 'SAR' } };
+
+  it('reads lifetime sold_quantity and views', () => {
+    const p = parseSallaProduct({ ...base, sold_quantity: 42, views: '1300' });
+    expect(p?.soldQuantity).toBe(42);
+    expect(p?.views).toBe(1300);
+  });
+
+  it('keeps null when the counters are absent or nonsense', () => {
+    expect(parseSallaProduct(base)?.soldQuantity).toBeNull();
+    expect(parseSallaProduct({ ...base, sold_quantity: -3, views: 'abc' })?.soldQuantity).toBeNull();
+    // A junk counter must never drop the whole product.
+    expect(parseSallaProduct({ ...base, views: 'abc' })?.name).toBe('عطر');
   });
 });

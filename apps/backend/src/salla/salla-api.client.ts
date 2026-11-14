@@ -98,6 +98,14 @@ function amountOf(v: z.infer<typeof moneyLike>): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** A non-negative whole counter, or null when Salla omitted it or sent nonsense. */
+function counter(v: unknown): number | null {
+  if (typeof v !== 'number' && typeof v !== 'string') return null;
+  if (typeof v === 'string' && v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : null;
+}
+
 const productSchema = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
   sku: z.string().nullish(),
@@ -113,6 +121,9 @@ const productSchema = z.object({
   quantity: z.coerce.number().nullish(),
   /** When true the `quantity` field is meaningless (it can be 0 or stale). */
   unlimited_quantity: z.boolean().nullish(),
+  /** Lifetime totals; Salla documents no time window for either. */
+  sold_quantity: z.unknown(),
+  views: z.unknown(),
   status: z.string().nullish(),
   url: z.string().nullish(),
   main_image: z.string().nullish(),
@@ -151,6 +162,9 @@ export interface SallaProduct {
   currency: string | null;
   /** null = unlimited / not tracked. */
   quantity: number | null;
+  /** Lifetime units sold / page views per Salla; null when absent. */
+  soldQuantity: number | null;
+  views: number | null;
   /** Salla status slug: "sale" | "out" | "hidden" (others pass through). */
   statusSlug: string | null;
   url: string | null;
@@ -200,6 +214,8 @@ export function parseSallaProduct(raw: unknown): SallaProduct | null {
       p.unlimited_quantity === true || p.quantity === null || p.quantity === undefined
         ? null
         : Math.max(0, Math.trunc(p.quantity)),
+    soldQuantity: counter(p.sold_quantity),
+    views: counter(p.views),
     statusSlug: p.status?.toLowerCase() ?? null,
     url: p.url ?? null,
     imageUrl:

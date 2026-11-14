@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, localToday } from '../sync/sales-aggregation';
+import { computePeriodReport, PERIOD_DAYS, type PeriodReport } from './period-report';
+import { computeProductReport, type ProductReport } from './product-report';
 import { computeStoreHealth, type StoreHealth } from './store-health';
 
 export interface AnalyticsSummaryResponse {
@@ -124,6 +126,82 @@ export class AnalyticsService {
       })),
     );
     return { currency: store.currency, lastSyncedAt: lastSynced?.toISOString() ?? null, health };
+  }
+
+  /** Rankings from Salla's lifetime sold/view counters plus an estimated profit per product. */
+  async getProductReport(
+    storeId: string,
+  ): Promise<{ currency: string; lastSyncedAt: string | null; report: ProductReport }> {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { currency: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+
+    const rows = await this.prisma.product.findMany({
+      where: { storeId, status: { not: 'DELETED' } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        price: true,
+        salePrice: true,
+        costPrice: true,
+        soldQuantity: true,
+        views: true,
+        syncedAt: true,
+      },
+    });
+    const lastSynced = rows.reduce<Date | null>(
+      (m, r) => (r.syncedAt && (!m || r.syncedAt > m) ? r.syncedAt : m),
+      null,
+    );
+    const report = computeProductReport(
+      rows.map((r) => ({
+        ...r,
+        price: r.price.toNumber(),
+        salePrice: r.salePrice?.toNumber() ?? null,
+        costPrice: r.costPrice?.toNumber() ?? null,
+      })),
+    );
+    return { currency: store.currency, lastSyncedAt: lastSynced?.toISOString() ?? null, report };
+  }
+
+  /** Store performance for the last complete week or 30 days versus the window before it. */
+  async getPeriodReport(
+    storeId: string,
+    period: 'week' | 'month',
+  ): Promise<{ currency: string } & PeriodReport> {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { currency: true },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+
+    const today = localToday();
+    const since = addDays(today, -(PERIOD_DAYS[period] * 2));
+    const rows = await this.prisma.salesSnapshot.findMany({
+      where: { storeId, date: { gte: ymdToDate(since) } },
+      select: {
+        date: true,
+        ordersCount: true,
+        unitsSold: true,
+        grossRevenue: true,
+        refundedRevenue: true,
+      },
+    });
+    const report = computePeriodReport(
+      rows.map((r) => ({
+        date: r.date.toISOString().slice(0, 10),
+        ordersCount: r.ordersCount,
+        unitsSold: r.unitsSold,
+        grossRevenue: r.grossRevenue.toNumber(),
+        refundedRevenue: r.refundedRevenue.toNumber(),
+      })),
+      period,
+      today,
+    );
+    return { currency: store.currency, ...report };
   }
 
   /** @param storeId the authenticated merchant's store (from the session, never the request) */

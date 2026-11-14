@@ -14,6 +14,8 @@ const sp = (id: string, over: Partial<SallaProduct> = {}): SallaProduct => ({
   costPrice: null,
   currency: null,
   quantity: 10,
+  soldQuantity: null,
+  views: null,
   statusSlug: 'sale',
   url: `https://store.example/p/${id}`,
   imageUrl: null,
@@ -47,7 +49,7 @@ describe('catalogue sync against real PostgreSQL', () => {
   it('inserts the catalogue with tenant/store ids, normalised money and status', async () => {
     const s = await seedStore(prisma, { currency: 'SAR' });
     listing([
-      sp('1', { price: 120.5, salePrice: 99.99, costPrice: 60 }),
+      sp('1', { price: 120.5, salePrice: 99.99, costPrice: 60, soldQuantity: 42, views: 900 }),
       sp('2', { quantity: 0 }),
       sp('3', { statusSlug: 'hidden', currency: 'USD' }),
     ]);
@@ -61,6 +63,8 @@ describe('catalogue sync against real PostgreSQL', () => {
     expect(rows[0]!.price.toFixed(2)).toBe('120.50');
     expect(rows[0]!.salePrice?.toFixed(2)).toBe('99.99');
     expect(rows[0]!.costPrice?.toFixed(2)).toBe('60.00');
+    expect(rows[0]).toMatchObject({ soldQuantity: 42, views: 900 });
+    expect(rows[1]).toMatchObject({ soldQuantity: null, views: null });
     expect(rows[0]!.syncedAt).not.toBeNull();
     expect(rows[2]!.currency).toBe('USD');
   });

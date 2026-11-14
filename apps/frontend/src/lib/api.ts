@@ -460,6 +460,9 @@ export const api = {
   onboarding: () => get<Onboarding>('/api/v1/onboarding'),
   analyticsSummary: () => get<AnalyticsSummary>('/api/v1/analytics/summary'),
   storeHealth: () => get<StoreHealth>('/api/v1/analytics/store-health'),
+  productReport: () => get<ProductReport>('/api/v1/analytics/product-report'),
+  periodReport: (period: 'week' | 'month') =>
+    get<PeriodReport>(`/api/v1/analytics/period-report?period=${period}`),
   dataConfidence: (q: DataConfidenceQuery = {}) => {
     const params = new URLSearchParams();
     if (q.status) params.set('status', q.status);
@@ -542,4 +545,45 @@ export interface StoreHealth {
     };
     inventory: { costValue: number | null; retailValue: number | null; productsCounted: number };
   };
+}
+
+export interface RankedProduct {
+  id: string;
+  name: string;
+  value: number;
+}
+export interface ProfitRow extends RankedProduct {
+  soldQuantity: number;
+  unitProfit: number;
+}
+export interface ProductReport {
+  currency: string;
+  lastSyncedAt: string | null;
+  report: {
+    coverage: { withSales: number; withViews: number; total: number };
+    topSellers: RankedProduct[];
+    neverSold: { count: number; sample: Array<{ id: string; name: string }> };
+    mostViewed: RankedProduct[];
+    lowConversion: Array<RankedProduct & { soldQuantity: number; conversionPct: number }>;
+    profit: { counted: number; most: ProfitRow[]; least: ProfitRow[] };
+  };
+}
+export interface PeriodTotals {
+  from: string;
+  to: string;
+  daysCovered: number;
+  orders: number;
+  units: number;
+  netRevenue: number;
+  refunded: number;
+  avgOrderValue: number | null;
+  bestDay: { date: string; netRevenue: number } | null;
+}
+export interface PeriodReport {
+  currency: string;
+  period: 'week' | 'month';
+  current: PeriodTotals;
+  previous: PeriodTotals;
+  revenueChangePct: number | null;
+  ordersChangePct: number | null;
 }

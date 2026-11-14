@@ -12,6 +12,8 @@ const sp = (id: string, over: Partial<SallaProduct> = {}): SallaProduct => ({
   costPrice: null,
   currency: null,
   quantity: null,
+  soldQuantity: null,
+  views: null,
   statusSlug: 'sale',
   url: null,
   imageUrl: null,

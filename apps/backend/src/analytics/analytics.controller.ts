@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { CurrentSession, SessionGuard } from '../session/session.guard';
 import type { SessionContext } from '../session/session.service';
 import { AnalyticsService, type AnalyticsSummaryResponse } from './analytics.service';
@@ -11,6 +11,17 @@ export class AnalyticsController {
   @Get('store-health')
   storeHealth(@CurrentSession() session: SessionContext) {
     return this.analytics.getStoreHealth(session.storeId);
+  }
+
+  @Get('product-report')
+  productReport(@CurrentSession() session: SessionContext) {
+    return this.analytics.getProductReport(session.storeId);
+  }
+
+  /** ?period=week (default) or month; anything else falls back to week. */
+  @Get('period-report')
+  periodReport(@CurrentSession() session: SessionContext, @Query('period') period?: string) {
+    return this.analytics.getPeriodReport(session.storeId, period === 'month' ? 'month' : 'week');
   }
 
   @Get('summary')

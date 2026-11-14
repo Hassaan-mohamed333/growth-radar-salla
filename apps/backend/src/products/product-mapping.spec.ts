@@ -10,6 +10,8 @@ const product = (over: Partial<SallaProduct> = {}): SallaProduct => ({
   costPrice: null,
   currency: null,
   quantity: 5,
+  soldQuantity: null,
+  views: null,
   statusSlug: 'sale',
   url: null,
   imageUrl: null,

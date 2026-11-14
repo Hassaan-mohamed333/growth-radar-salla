@@ -9,6 +9,8 @@ export interface ProductValues {
   costPrice: number | null;
   currency: string;
   quantity: number | null;
+  soldQuantity: number | null;
+  views: number | null;
   status: ProductStatus;
   url: string | null;
   imageUrl: string | null;
@@ -43,6 +45,8 @@ export function toProductValues(p: SallaProduct, storeCurrency: string): Product
     costPrice: p.costPrice,
     currency: p.currency ?? storeCurrency,
     quantity: p.quantity,
+    soldQuantity: p.soldQuantity,
+    views: p.views,
     // A tracked quantity of 0 means out of stock even if the slug still says "sale".
     status: status === 'SALE' && p.quantity === 0 ? 'OUT' : status,
     url: p.url,

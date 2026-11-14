@@ -223,6 +223,10 @@ model Product {
   costPrice      Decimal?      @map("cost_price") @db.Decimal(12, 2)
   currency       String        @default("SAR") @db.VarChar(3)
   quantity       Int?
+  /// Lifetime units sold as reported by Salla (no time window documented).
+  soldQuantity   Int?          @map("sold_quantity")
+  /// Lifetime product page views as reported by Salla.
+  views          Int?
   status         ProductStatus @default(SALE)
   url            String?
   imageUrl       String?       @map("image_url")
